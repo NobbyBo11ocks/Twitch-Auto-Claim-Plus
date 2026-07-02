@@ -1,0 +1,16 @@
+{
+  "summary": {
+    "en-US": "Auto-claim Twitch channel point bonuses, apply optional theme presets, custom accent colors, and chat text scaling."
+  },
+  "categories": [
+    "appearance",
+    "other"
+  ],
+  "homepage": {
+    "en-US": "https://discord.gg/bke5DEUJzE"
+  },
+  "license": "MIT",
+  "description": {
+    "en-US": "Twitch Auto Claim Plus helps tidy up and enhance the Twitch experience.\n\nFeatures:\n- Auto-claim channel point bonus rewards\n- Optional Twitch theme presets\n- Custom accent color override\n- Chat message text scaling\n- Quick link to the developer's Discord community\n\nThis extension is intended for Twitch pages only."
+  }
+}

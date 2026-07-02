@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Twitch Auto Claim Plus</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="app">
+    <div class="content">
+      <section class="status-panel" aria-live="off" aria-atomic="true">
+        <div class="stats-grid">
+          <div class="stat">
+            <span class="stat-label">Auto-claim</span>
+            <strong id="statusAutoClaim" class="stat-value">—</strong>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Theme</span>
+            <strong id="statusTheme" class="stat-value">—</strong>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Accent</span>
+            <strong id="statusAccent" class="stat-value">—</strong>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Last claim</span>
+            <strong id="statusLastClaim" class="stat-value">—</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <div class="control-row">
+          <div class="control-copy">
+            <span class="control-title">Auto-claim</span>
+            <span class="control-meta">Channel points bonus</span>
+          </div>
+          <label class="switch">
+            <input id="autoClaim" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-row">
+          <div class="control-copy">
+            <span class="control-title">Theme</span>
+            <span class="control-meta">Custom Twitch theme</span>
+          </div>
+          <label class="switch">
+            <input id="themeEnabled" type="checkbox" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="control-stack">
+          <label class="control-copy" for="theme">
+            <span class="control-title">Preset</span>
+            <span id="previewTitle" class="control-meta">Twitch default</span>
+          </label>
+          <select id="theme" class="select">
+            <option value="default">Twitch default</option>
+            <option value="midnight">Midnight Blue</option>
+            <option value="slate">Slate Glass</option>
+            <option value="cyber">Cyber Neon</option>
+            <option value="ember">Ember Red</option>
+            <option value="forest">Forest Green</option>
+            <option value="arctic">Arctic Light</option>
+            <option value="solar">Solar Gold</option>
+            <option value="rose">Rose Noir</option>
+            <option value="ocean">Ocean Cyan</option>
+            <option value="grape">Grape Pop</option>
+            <option value="matrix">Matrix Lime</option>
+            <option value="candy">Candy Light</option>
+            <option value="oled">OLED Mint</option>
+          </select>
+        </div>
+
+        <div class="control-stack">
+          <label class="control-copy" for="accent">
+            <span class="control-title">Accent</span>
+            <span id="previewDescription" class="control-meta">Native Twitch styling.</span>
+          </label>
+          <div class="inline-controls">
+            <input id="accent" class="color-input" type="color" value="#9146ff" />
+            <output id="accentHex" class="value-chip">#9146FF</output>
+            <button id="presetAccent" class="mini-button" type="button">Use preset</button>
+            <label class="checkbox-chip">
+              <input id="defaultAccent" type="checkbox" />
+              <span>Default accent</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="control-stack">
+          <label class="control-copy" for="fontScale">
+            <span class="control-title">Chat size</span>
+            <span class="control-meta">Message text only</span>
+          </label>
+          <div class="range-row">
+            <input id="fontScale" class="range-input" type="range" min="90" max="115" step="1" value="100" />
+            <span id="fontScaleValue" class="value-chip">100%</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <div id="status" class="footer-status">Ready</div>
+      <div class="footer-actions">
+        <button id="refreshStatus" class="icon-button" type="button" title="Refresh status" aria-label="Refresh status">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+        <button id="resetAll" class="icon-button" type="button" title="Reset settings" aria-label="Reset settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+        </button>
+        <a class="icon-button" href="https://discord.gg/bke5DEUJzE" target="_blank" rel="noopener noreferrer" title="Join our Discord" aria-label="Join our Discord">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"></path>
+          </svg>
+        </a>
+      </div>
+    </footer>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>
