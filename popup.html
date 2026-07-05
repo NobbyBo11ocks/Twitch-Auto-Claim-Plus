@@ -11,6 +11,21 @@
     <div class="content">
       <section class="status-panel" aria-live="off" aria-atomic="true">
         <div class="stats-grid">
+          <div class="stat stat-hero">
+            <span class="stat-label">Points claimed <span class="stat-label-meta">(all-time)</span></span>
+            <span class="stat-hero-value">
+              <strong id="statusTotalPoints" class="stat-value stat-value--hero">—</strong>
+              <button id="resetPoints" class="stat-reset-button" type="button" title="Reset points counter" aria-label="Reset points counter">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                  <path d="M10 11v6"></path>
+                  <path d="M14 11v6"></path>
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                </svg>
+              </button>
+            </span>
+          </div>
           <div class="stat">
             <span class="stat-label">Auto-claim</span>
             <strong id="statusAutoClaim" class="stat-value">—</strong>

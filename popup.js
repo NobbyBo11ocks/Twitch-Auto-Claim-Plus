@@ -64,6 +64,8 @@
     statusTheme: $("statusTheme"),
     statusAccent: $("statusAccent"),
     statusLastClaim: $("statusLastClaim"),
+    statusTotalPoints: $("statusTotalPoints"),
+    resetPoints: $("resetPoints"),
     previewTitle: $("previewTitle"),
     previewDescription: $("previewDescription")
   };
@@ -179,6 +181,11 @@
     return `${Math.floor(hours / 24)}d`;
   };
 
+  const formatPoints = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number.toLocaleString("en-US") : "0";
+  };
+
   const getActiveTwitchTab = async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     return tab?.id && /^https:\/\/([a-z0-9-]+\.)*twitch\.tv\//i.test(tab.url || "") ? tab : null;
@@ -190,7 +197,8 @@
     theme: "—",
     accent: "—",
     lastClaim: "—",
-    lastClaimAt: 0
+    lastClaimAt: 0,
+    totalPoints: "—"
   });
 
   const buildStatusView = (payload, onTwitchTab) => {
@@ -210,7 +218,8 @@
       theme: themeLabel,
       accent: accent.toLowerCase() === DEFAULTS.accent.toLowerCase() ? "Default" : accent.toUpperCase(),
       lastClaim: formatRelativeTime(status.lastClaimAt),
-      lastClaimAt: Number(status.lastClaimAt) || 0
+      lastClaimAt: Number(status.lastClaimAt) || 0,
+      totalPoints: formatPoints(status.totalClaimedPoints)
     };
   };
 
@@ -219,7 +228,8 @@
       autoClaim: view.autoClaim,
       theme: view.theme,
       accent: view.accent,
-      lastClaim: view.lastClaim
+      lastClaim: view.lastClaim,
+      totalPoints: view.totalPoints
     });
 
     lastKnownStatus = view;
@@ -232,6 +242,7 @@
     setText(controls.statusTheme, view.theme);
     setText(controls.statusAccent, view.accent);
     setText(controls.statusLastClaim, view.lastClaim);
+    setText(controls.statusTotalPoints, view.totalPoints);
   };
 
   const refreshRelativeTimeOnly = () => {
@@ -289,6 +300,23 @@
     } finally {
       statusRequestInFlight = false;
     }
+  };
+
+  const resetPointsTotal = async () => {
+    const tab = await getActiveTwitchTab();
+    if (!tab) {
+      flashStatus("Open a Twitch tab first");
+      return;
+    }
+
+    const confirmed = window.confirm("Reset the all-time points counter to 0? This can't be undone.");
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await sendMessageToTab(tab.id, { type: "TWITCH_TOOLS_RESET_POINTS" });
+    renderStatusView(buildStatusView(response, true));
+    flashStatus("Points counter reset");
   };
 
   const applyToCurrentTab = async (settings) => {
@@ -436,6 +464,7 @@
 
     controls.presetAccent.addEventListener("click", applyPresetAccent);
     controls.resetAll.addEventListener("click", resetAllSettings);
+    controls.resetPoints.addEventListener("click", resetPointsTotal);
     controls.refreshStatus.addEventListener("click", fetchStatus);
     chrome.storage.onChanged.addListener(syncFromStorageChanges);
   };

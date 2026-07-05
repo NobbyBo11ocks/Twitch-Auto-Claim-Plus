@@ -192,6 +192,10 @@
   };
 
   const STYLE_ID = "twitch-tools-theme-style";
+  const NAV_STYLE_ID = "twitch-tools-nav-style";
+  const NAV_BUTTON_ID = "twitch-tools-nav-button";
+  const NAV_PANEL_ID = "twitch-tools-nav-panel";
+  const ELLIPSIS_SELECTOR = '[data-a-target="ellipsis-button"]';
   const CLAIM_COOLDOWN_MS = 5000;
   const SCAN_INTERVAL_MS = 15000;
   const CLAIM_MUTATION_THROTTLE_MS = 2500;
@@ -207,6 +211,7 @@
   let observer = null;
   let observedRoot = null;
   let queuedScan = 0;
+  let navPanelOpen = false;
 
   const safeStorageGet = (keys) =>
     new Promise((resolve) => {
@@ -262,6 +267,11 @@
       totalClaimedPoints = next;
       safeLocalSet({ [CLAIM_SESSION_TOTAL_KEY]: next });
     });
+  };
+
+  const resetPointsTotal = () => {
+    totalClaimedPoints = 0;
+    safeLocalSet({ [CLAIM_SESSION_TOTAL_KEY]: 0 });
   };
 
   const clampNumber = (value, min, max, fallback) => {
@@ -476,6 +486,7 @@
     observedRoot = root;
     observer = new MutationObserver((mutations) => {
       if (mutationMightContainClaimButton(mutations)) queueClaimScan();
+      ensureNavButton();
     });
     observer.observe(root, {
       childList: true,
@@ -630,12 +641,29 @@
     const accent = s.accent;
     const looseStyling = interfaceCss(s, p, accent, { includeAccentVars: !activeTheme });
 
-    if (!activeTheme) return `${looseStyling}
+    // Dedicated, uniquely-prefixed variables for our own injected UI (the nav
+    // panel). Always set explicitly here, in both branches, so that UI never
+    // silently inherits Twitch's own same-named design tokens (e.g. Twitch already
+    // defines its own --color-border-base for its native dark/light mode) when no
+    // theme is active.
+    const panelVars = `
+      :root {
+        --twitch-tools-accent: ${accent};
+        --twitch-tools-panel-bg: ${activeTheme ? p.surface : "#0e0e10"};
+        --twitch-tools-panel-border: ${activeTheme ? p.border : "rgba(255, 255, 255, 0.12)"};
+        --twitch-tools-panel-text: ${activeTheme ? p.text : "#f3f3f5"};
+        --twitch-tools-panel-muted: ${activeTheme ? p.muted : "#8d8d97"};
+        --twitch-tools-panel-input-bg: ${activeTheme ? p.surface2 : "#17171b"};
+      }
+    `;
+
+    if (!activeTheme) return `${panelVars}
+${looseStyling}
 ${tuningCss}`;
 
     return `
+      ${panelVars}
       :root {
-        --twitch-tools-accent: ${accent};
         --color-background-body: ${p.bg} !important;
         --color-background-base: ${p.base} !important;
         --color-background-alt: ${p.surface} !important;
@@ -682,7 +710,11 @@ ${tuningCss}`;
         color: ${p.text} !important;
       }
 
-      input,
+      /* Exclude range/checkbox/radio/color/file inputs: browsers render these as
+         native widgets (e.g. the player's volume slider is a plain
+         <input type="range">), and forcing a background/border here paints a
+         visible box behind the native track/thumb instead of recoloring it. */
+      input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="image"]),
       textarea,
       select,
       [contenteditable="true"],
@@ -691,7 +723,7 @@ ${tuningCss}`;
         border-color: ${p.border} !important;
       }
 
-      input,
+      input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="image"]),
       textarea,
       select {
         background-color: ${p.input} !important;
@@ -726,6 +758,436 @@ ${tuningCss}`;
     `;
   };
 
+  const injectNavStyle = () => {
+    if (document.getElementById(NAV_STYLE_ID)) return;
+
+    const style = document.createElement("style");
+    style.id = NAV_STYLE_ID;
+    style.textContent = `
+      #${NAV_BUTTON_ID} {
+        all: unset;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        margin-left: 4px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: #efeff1;
+        box-sizing: border-box;
+      }
+      #${NAV_BUTTON_ID}:hover,
+      #${NAV_BUTTON_ID}:focus-visible {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      #${NAV_BUTTON_ID} img {
+        display: block;
+        width: 18px;
+        height: 18px;
+        pointer-events: none;
+      }
+
+      #${NAV_PANEL_ID} {
+        all: initial;
+        display: block;
+        position: fixed;
+        z-index: 2147483647;
+        width: 260px;
+        background: var(--twitch-tools-panel-bg, #0e0e10);
+        border: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.12));
+        border-radius: 12px;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+        padding: 12px;
+        font-family: Inter, Roobert, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: var(--twitch-tools-panel-text, #f3f3f5);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      #${NAV_PANEL_ID}[hidden] {
+        display: none;
+      }
+      #${NAV_PANEL_ID} * {
+        box-sizing: border-box;
+        font-family: inherit;
+        color: inherit;
+        margin: 0;
+        padding: 0;
+      }
+      #${NAV_PANEL_ID} button,
+      #${NAV_PANEL_ID} select {
+        font: inherit;
+        appearance: none;
+        -webkit-appearance: none;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
+      #${NAV_PANEL_ID} .ttnp-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 10px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.08));
+      }
+      #${NAV_PANEL_ID} .ttnp-logo {
+        width: 20px;
+        height: 20px;
+        display: block;
+      }
+      #${NAV_PANEL_ID} .ttnp-title {
+        font-weight: 700;
+        font-size: 13px;
+      }
+      #${NAV_PANEL_ID} .ttnp-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 7px 0;
+      }
+      #${NAV_PANEL_ID} .ttnp-row--stack {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+      }
+      #${NAV_PANEL_ID} .ttnp-label {
+        color: var(--twitch-tools-panel-muted, #b9b9c2);
+      }
+      #${NAV_PANEL_ID} .ttnp-meta {
+        color: var(--twitch-tools-panel-muted, #8d8d97);
+        font-weight: 400;
+      }
+      #${NAV_PANEL_ID} .ttnp-value-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      #${NAV_PANEL_ID} .ttnp-value {
+        font-weight: 800;
+        color: var(--twitch-tools-accent, #9146ff);
+      }
+      #${NAV_PANEL_ID} .ttnp-icon-btn {
+        display: inline-grid;
+        place-items: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        color: var(--twitch-tools-panel-muted, #8d8d97);
+      }
+      #${NAV_PANEL_ID} .ttnp-icon-btn:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #ff6b81;
+      }
+      #${NAV_PANEL_ID} .ttnp-switch {
+        position: relative;
+        display: inline-flex;
+        width: 38px;
+        height: 22px;
+        flex: 0 0 auto;
+        cursor: pointer;
+      }
+      #${NAV_PANEL_ID} .ttnp-switch input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+      #${NAV_PANEL_ID} .ttnp-slider {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 100%;
+        border-radius: 999px;
+        border: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.15));
+        background: rgba(255, 255, 255, 0.08);
+        transition: background-color 120ms ease, border-color 120ms ease;
+      }
+      #${NAV_PANEL_ID} .ttnp-slider::before {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: #ffffff;
+        transition: transform 120ms ease;
+      }
+      #${NAV_PANEL_ID} .ttnp-switch input:checked + .ttnp-slider {
+        background: color-mix(in srgb, var(--twitch-tools-accent, #9146ff) 35%, transparent);
+        border-color: var(--twitch-tools-accent, #9146ff);
+      }
+      #${NAV_PANEL_ID} .ttnp-switch input:checked + .ttnp-slider::before {
+        transform: translateX(16px);
+      }
+      #${NAV_PANEL_ID} .ttnp-select {
+        width: 100%;
+        min-height: 32px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.12));
+        background-color: var(--twitch-tools-panel-input-bg, #17171b);
+      }
+      #${NAV_PANEL_ID} .ttnp-footer {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.08));
+        color: var(--twitch-tools-panel-muted, #8d8d97);
+        font-size: 11px;
+      }
+    `;
+    document.documentElement.appendChild(style);
+  };
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  const createEl = (tag, options = {}, children = []) => {
+    const node = document.createElement(tag);
+    if (options.id) node.id = options.id;
+    if (options.className) node.className = options.className;
+    if (options.text !== undefined) node.textContent = options.text;
+    if (options.attrs) {
+      for (const [key, value] of Object.entries(options.attrs)) node.setAttribute(key, value);
+    }
+    for (const child of children) node.appendChild(child);
+    return node;
+  };
+
+  const createTrashIcon = () => {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    const svgAttrs = {
+      width: "12",
+      height: "12",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "2",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "aria-hidden": "true"
+    };
+    for (const [key, value] of Object.entries(svgAttrs)) svg.setAttribute(key, value);
+
+    const parts = [
+      ["polyline", { points: "3 6 5 6 21 6" }],
+      ["path", { d: "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" }],
+      ["path", { d: "M10 11v6" }],
+      ["path", { d: "M14 11v6" }],
+      ["path", { d: "M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" }]
+    ];
+    for (const [tag, attrs] of parts) {
+      const el = document.createElementNS(SVG_NS, tag);
+      for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, value);
+      svg.appendChild(el);
+    }
+    return svg;
+  };
+
+  const buildNavPanelElement = () => {
+    const header = createEl("div", { className: "ttnp-header" }, [
+      createEl("img", { className: "ttnp-logo", attrs: { alt: "", src: chrome.runtime.getURL("icons/icon32.png") } }),
+      createEl("span", { className: "ttnp-title", text: "Twitch Auto Claim Plus" })
+    ]);
+
+    const pointsLabel = createEl("span", { className: "ttnp-label" });
+    pointsLabel.append(
+      "Points claimed ",
+      createEl("span", { className: "ttnp-meta", text: "(all-time)" })
+    );
+
+    const resetButton = createEl("button", {
+      className: "ttnp-icon-btn",
+      attrs: {
+        type: "button",
+        "data-action": "reset-points",
+        title: "Reset points counter",
+        "aria-label": "Reset points counter"
+      }
+    }, [createTrashIcon()]);
+
+    const pointsRow = createEl("div", { className: "ttnp-row" }, [
+      pointsLabel,
+      createEl("span", { className: "ttnp-value-group" }, [
+        createEl("strong", { id: "ttnp-points", className: "ttnp-value", text: "0" }),
+        resetButton
+      ])
+    ]);
+
+    const autoClaimSwitch = createEl("label", { className: "ttnp-switch" }, [
+      createEl("input", { id: "ttnp-autoclaim", attrs: { type: "checkbox", "data-action": "toggle-autoclaim" } }),
+      createEl("span", { className: "ttnp-slider" })
+    ]);
+    const autoClaimRow = createEl("div", { className: "ttnp-row" }, [
+      createEl("span", { className: "ttnp-label", text: "Auto-claim" }),
+      autoClaimSwitch
+    ]);
+
+    const themeSelect = createEl("select", { id: "ttnp-theme", className: "ttnp-select", attrs: { "data-action": "change-theme" } });
+    for (const [key, preset] of Object.entries(THEME_PRESETS)) {
+      const option = createEl("option", { text: preset.label, attrs: { value: key } });
+      if (key === settings.theme) option.selected = true;
+      themeSelect.appendChild(option);
+    }
+    const themeRow = createEl("div", { className: "ttnp-row ttnp-row--stack" }, [
+      createEl("span", { className: "ttnp-label", text: "Theme" }),
+      themeSelect
+    ]);
+
+    const footer = createEl("div", { className: "ttnp-footer", text: "More options in the toolbar popup" });
+
+    const panel = createEl("div", { id: NAV_PANEL_ID });
+    panel.hidden = true;
+    panel.append(header, pointsRow, autoClaimRow, themeRow, footer);
+    return panel;
+  };
+
+  const renderNavPanel = () => {
+    const panel = document.getElementById(NAV_PANEL_ID);
+    if (!panel) return;
+
+    const pointsEl = panel.querySelector("#ttnp-points");
+    const autoClaimEl = panel.querySelector("#ttnp-autoclaim");
+    const themeEl = panel.querySelector("#ttnp-theme");
+
+    if (pointsEl) {
+      pointsEl.textContent = totalClaimedPoints > 0
+        ? totalClaimedPoints.toLocaleString("en-US")
+        : String(totalClaimedPoints || 0);
+    }
+    if (autoClaimEl) autoClaimEl.checked = Boolean(settings.autoClaim);
+    if (themeEl && themeEl.value !== settings.theme) themeEl.value = settings.theme;
+  };
+
+  const positionNavPanel = () => {
+    const button = document.getElementById(NAV_BUTTON_ID);
+    const panel = document.getElementById(NAV_PANEL_ID);
+    if (!button || !panel) return;
+
+    const rect = button.getBoundingClientRect();
+    const panelWidth = panel.offsetWidth || 260;
+    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - panelWidth / 2, window.innerWidth - panelWidth - 8));
+
+    panel.style.top = `${Math.round(rect.bottom + 8)}px`;
+    panel.style.left = `${Math.round(left)}px`;
+  };
+
+  const closeNavPanel = () => {
+    const panel = document.getElementById(NAV_PANEL_ID);
+    if (panel) panel.hidden = true;
+    navPanelOpen = false;
+    document.removeEventListener("mousedown", onOutsideNavClick, true);
+    document.removeEventListener("keydown", onNavPanelKeydown, true);
+    window.removeEventListener("resize", positionNavPanel);
+  };
+
+  const onOutsideNavClick = (event) => {
+    const panel = document.getElementById(NAV_PANEL_ID);
+    const button = document.getElementById(NAV_BUTTON_ID);
+    if (!panel) return;
+    if (panel.contains(event.target) || button?.contains(event.target)) return;
+    closeNavPanel();
+  };
+
+  const onNavPanelKeydown = (event) => {
+    if (event.key === "Escape") closeNavPanel();
+  };
+
+  const createNavPanel = () => {
+    if (document.getElementById(NAV_PANEL_ID)) return;
+    injectNavStyle();
+
+    const panel = buildNavPanelElement();
+
+    panel.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-action]");
+      if (!target || target.dataset.action !== "reset-points") return;
+
+      const confirmed = window.confirm("Reset the all-time points counter to 0? This can't be undone.");
+      if (!confirmed) return;
+      resetPointsTotal();
+      renderNavPanel();
+    });
+
+    panel.addEventListener("change", (event) => {
+      const target = event.target;
+      const action = target?.dataset?.action;
+      if (!action) return;
+
+      if (action === "toggle-autoclaim") {
+        const nextSettings = normalizeSettings({ ...settings, autoClaim: target.checked });
+        safeStorageSet(nextSettings);
+        applyRuntimeState(nextSettings);
+      }
+
+      if (action === "change-theme") {
+        const selectedTheme = Object.prototype.hasOwnProperty.call(THEME_PRESETS, target.value)
+          ? target.value
+          : DEFAULTS.theme;
+        const nextSettings = normalizeSettings({
+          ...settings,
+          theme: selectedTheme,
+          themeEnabled: selectedTheme !== "default",
+          accent: THEME_PRESETS[selectedTheme]?.accent || DEFAULTS.accent
+        });
+        safeStorageSet(nextSettings);
+        applyRuntimeState(nextSettings);
+      }
+    });
+
+    document.body.appendChild(panel);
+  };
+
+  const openNavPanel = () => {
+    createNavPanel();
+    renderNavPanel();
+
+    const panel = document.getElementById(NAV_PANEL_ID);
+    if (!panel) return;
+
+    panel.hidden = false;
+    positionNavPanel();
+    navPanelOpen = true;
+
+    document.addEventListener("mousedown", onOutsideNavClick, true);
+    document.addEventListener("keydown", onNavPanelKeydown, true);
+    window.addEventListener("resize", positionNavPanel);
+  };
+
+  const toggleNavPanel = () => {
+    if (navPanelOpen) closeNavPanel();
+    else openNavPanel();
+  };
+
+  const ensureNavButton = () => {
+    if (document.getElementById(NAV_BUTTON_ID)) return;
+
+    const ellipsis = document.querySelector(ELLIPSIS_SELECTOR);
+    if (!ellipsis) return;
+
+    const wrapper = ellipsis.closest("div") || ellipsis;
+    if (!wrapper.parentElement) return;
+
+    injectNavStyle();
+
+    const button = document.createElement("button");
+    button.id = NAV_BUTTON_ID;
+    button.type = "button";
+    button.title = "Twitch Auto Claim Plus";
+    button.setAttribute("aria-label", "Twitch Auto Claim Plus");
+    const icon = document.createElement("img");
+    icon.alt = "";
+    icon.src = chrome.runtime.getURL("icons/icon32.png");
+    button.appendChild(icon);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleNavPanel();
+    });
+
+    wrapper.parentElement.insertBefore(button, wrapper.nextSibling);
+  };
+
   const applyTheme = () => {
     let style = document.getElementById(STYLE_ID);
     if (!style) {
@@ -742,6 +1204,7 @@ ${tuningCss}`;
   const applyRuntimeState = (nextSettings, { runClaim = true } = {}) => {
     settings = normalizeSettings(nextSettings);
     applyTheme();
+    renderNavPanel();
     if (runClaim) claimBonus();
   };
 
@@ -771,10 +1234,14 @@ ${tuningCss}`;
 
   const startScanning = () => {
     if (scanTimer) window.clearInterval(scanTimer);
-    scanTimer = window.setInterval(claimBonus, SCAN_INTERVAL_MS);
+    scanTimer = window.setInterval(() => {
+      claimBonus();
+      ensureNavButton();
+    }, SCAN_INTERVAL_MS);
 
     ensureScanObserver();
     claimBonus();
+    ensureNavButton();
   };
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -784,6 +1251,13 @@ ${tuningCss}`;
       const nextSettings = normalizeSettings({ ...settings, ...message.settings });
       safeStorageSet(nextSettings);
       applyRuntimeState(nextSettings);
+      sendResponse({ ok: true, status: getStatus() });
+      return;
+    }
+
+    if (message.type === "TWITCH_TOOLS_RESET_POINTS") {
+      resetPointsTotal();
+      renderNavPanel();
       sendResponse({ ok: true, status: getStatus() });
       return;
     }
@@ -818,5 +1292,6 @@ ${tuningCss}`;
     if (scanTimer) window.clearInterval(scanTimer);
     if (queuedScan) window.clearTimeout(queuedScan);
     if (observer) observer.disconnect();
+    closeNavPanel();
   });
 })();

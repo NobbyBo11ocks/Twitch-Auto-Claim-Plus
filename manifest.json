@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Twitch Auto Claim Plus",
-  "version": "1.6.7",
+  "version": "1.6.9",
   "description": "Created By NobbyBollocks. Twitch Auto Claim Plus.",
   "permissions": [
     "storage",
@@ -36,7 +36,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "twitch-tools@addons.nobbybollocks",
-      "strict_min_version": "140.0",
+      "strict_min_version": "142.0",
       "data_collection_permissions": {
         "required": [
           "none"

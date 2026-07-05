@@ -14,6 +14,7 @@ Features:
 - Optional Twitch theme presets
 - Custom accent color override
 - Chat message text scaling
+- Quick-access button in Twitch's own nav bar (auto-claim toggle, theme picker, points total)
 - Quick link to the developer's Discord community
 
 This extension runs on Twitch pages only and stores settings locally in the browser sync/storage area.
