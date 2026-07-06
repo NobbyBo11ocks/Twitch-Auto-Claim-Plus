@@ -4,20 +4,22 @@
 Twitch Auto Claim Plus
 
 ## Summary
-Auto-claim Twitch channel point bonuses, apply optional theme presets, custom accent colors, and chat text scaling.
+Never miss a channel point bonus again. Automatically claims Twitch rewards, with optional theme presets, custom accent colors, and adjustable chat text size.
 
 ## Description
-Twitch Auto Claim Plus adds a few focused quality-of-life features for Twitch.
+Twitch Auto Claim Plus is a lightweight browser extension that automatically claims Twitch channel point bonuses the moment they appear, so you never miss out while watching your favorite streams. It also includes a set of optional tools for personalizing how Twitch looks and feels.
 
-Features:
-- Auto-claim visible channel point bonus rewards
-- Optional Twitch theme presets
-- Custom accent color override
-- Chat message text scaling
-- Quick-access button in Twitch's own nav bar (auto-claim toggle, theme picker, points total)
-- Quick link to the developer's Discord community
+Features
+- Automatic channel point bonus claiming, running quietly in the background
+- A curated selection of Twitch theme presets
+- Custom accent color support
+- Adjustable chat message text size
+- A quick-access panel built into Twitch's own navigation bar, showing auto-claim status, a theme picker, and your total points claimed
+- A toolbar icon that opens a movable, resizable window instead of a fixed popup
+- A link to the developer's Discord community for support and feedback
 
-This extension runs on Twitch pages only and stores settings locally in the browser sync/storage area.
+Privacy
+Twitch Auto Claim Plus runs only on Twitch pages, requires no account credentials, and does not collect or transmit any personal data.
 
 ## Privacy
 - The extension itself makes no network requests or remote calls

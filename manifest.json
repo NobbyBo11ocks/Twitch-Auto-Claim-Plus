@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Twitch Auto Claim Plus",
-  "version": "1.6.9",
+  "version": "1.0.4",
   "description": "Created By NobbyBollocks. Twitch Auto Claim Plus.",
   "permissions": [
     "storage",
@@ -18,6 +18,8 @@
         "*://*.twitch.tv/*"
       ],
       "js": [
+        "theme-presets.js",
+        "settings-schema.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -33,6 +35,17 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/icon32.png"
+      ],
+      "matches": [
+        "*://twitch.tv/*",
+        "*://*.twitch.tv/*"
+      ]
+    }
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "twitch-tools@addons.nobbybollocks",

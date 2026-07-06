@@ -27,8 +27,8 @@ body {
   min-width: 388px;
   max-width: 388px;
   background:
-    radial-gradient(circle at top right, rgba(145, 70, 255, 0.18), transparent 42%),
-    linear-gradient(180deg, #0e0e10 0%, #101014 100%);
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 18%, transparent), transparent 42%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
   color: var(--text);
   font-family: var(--font);
 }
@@ -59,7 +59,7 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-strong);
-  border-radius: 18px;
+  border-radius: 12px;
   background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -71,7 +71,7 @@ input[type="checkbox"] {
   justify-content: space-between;
   gap: 12px;
   padding: 8px 12px;
-  background: rgba(11, 11, 14, 0.76);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
   backdrop-filter: blur(12px);
   border-top: 1px solid var(--border);
 }
@@ -102,7 +102,7 @@ input[type="checkbox"] {
 .select,
 .color-input {
   min-height: 34px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-soft);
   color: var(--text);
@@ -110,9 +110,16 @@ input[type="checkbox"] {
 }
 
 .icon-button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-soft);
   color: var(--text);
+  text-decoration: none;
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
@@ -131,18 +138,8 @@ input[type="checkbox"] {
 .color-input:focus-visible,
 .range-input:focus-visible,
 .switch input:focus-visible + .slider {
-  outline: 2px solid rgba(145, 70, 255, 0.5);
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: 2px;
-}
-
-.icon-button {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border-radius: 8px;
-  display: inline-grid;
-  place-items: center;
-  text-decoration: none;
 }
 
 .mini-button {
@@ -162,7 +159,7 @@ input[type="checkbox"] {
 .status-panel,
 .controls {
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
 }
 
@@ -197,11 +194,6 @@ input[type="checkbox"] {
   border-bottom: 1px solid var(--border);
 }
 
-.stat-label-meta {
-  font-weight: 400;
-  color: var(--text-dim);
-}
-
 .stat-value--hero {
   font-size: 18px;
   color: var(--accent);
@@ -233,7 +225,7 @@ input[type="checkbox"] {
 }
 
 .stat-reset-button:focus-visible {
-  outline: 2px solid rgba(145, 70, 255, 0.5);
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
   outline-offset: 2px;
 }
 
@@ -384,8 +376,8 @@ input[type="checkbox"] {
 }
 
 .switch input:checked + .slider {
-  background: rgba(145, 70, 255, 0.28);
-  border-color: rgba(145, 70, 255, 0.5);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .switch input:checked + .slider::before {

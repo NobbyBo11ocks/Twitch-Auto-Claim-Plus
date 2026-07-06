@@ -12,7 +12,7 @@
       <section class="status-panel" aria-live="off" aria-atomic="true">
         <div class="stats-grid">
           <div class="stat stat-hero">
-            <span class="stat-label">Points claimed <span class="stat-label-meta">(all-time)</span></span>
+            <span class="stat-label">Points claimed</span>
             <span class="stat-hero-value">
               <strong id="statusTotalPoints" class="stat-value stat-value--hero">—</strong>
               <button id="resetPoints" class="stat-reset-button" type="button" title="Reset points counter" aria-label="Reset points counter">
@@ -71,10 +71,10 @@
         <div class="control-stack">
           <label class="control-copy" for="theme">
             <span class="control-title">Preset</span>
-            <span id="previewTitle" class="control-meta">Twitch default</span>
+            <span id="previewTitle" class="control-meta">Twitch Default</span>
           </label>
           <select id="theme" class="select">
-            <option value="default">Twitch default</option>
+            <option value="default">Twitch Default</option>
             <option value="midnight">Midnight Blue</option>
             <option value="slate">Slate Glass</option>
             <option value="cyber">Cyber Neon</option>
@@ -88,6 +88,8 @@
             <option value="matrix">Matrix Lime</option>
             <option value="candy">Candy Light</option>
             <option value="oled">OLED Mint</option>
+            <option value="graphite">Graphite Mono</option>
+            <option value="paper">Paper Light</option>
           </select>
         </div>
 
@@ -145,6 +147,8 @@
     </footer>
   </main>
 
+  <script src="theme-presets.js"></script>
+  <script src="settings-schema.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

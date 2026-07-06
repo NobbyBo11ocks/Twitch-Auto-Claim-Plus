@@ -1,6 +1,6 @@
 {
   "summary": {
-    "en-US": "Auto-claim Twitch channel point bonuses, apply optional theme presets, custom accent colors, and chat text scaling."
+    "en-US": "Never miss a channel point bonus again. Automatically claims Twitch rewards, with optional theme presets, custom accent colors, and adjustable chat text size."
   },
   "categories": [
     "appearance",
@@ -11,6 +11,9 @@
   },
   "license": "MIT",
   "description": {
-    "en-US": "Twitch Auto Claim Plus helps tidy up and enhance the Twitch experience.\n\nFeatures:\n- Auto-claim channel point bonus rewards\n- Optional Twitch theme presets\n- Custom accent color override\n- Chat message text scaling\n- Quick-access button in Twitch's own nav bar (auto-claim toggle, theme picker, points total)\n- Quick link to the developer's Discord community\n\nThis extension is intended for Twitch pages only."
+    "en-US": "Twitch Auto Claim Plus is a lightweight browser extension that automatically claims Twitch channel point bonuses the moment they appear, so you never miss out while watching your favorite streams. It also includes a set of optional tools for personalizing how Twitch looks and feels.\n\nFeatures\n- Automatic channel point bonus claiming, running quietly in the background\n- A curated selection of Twitch theme presets\n- Custom accent color support\n- Adjustable chat message text size\n- A quick-access panel built into Twitch's own navigation bar, showing auto-claim status, a theme picker, and your total points claimed\n- A toolbar icon that opens a movable, resizable window instead of a fixed popup\n- A link to the developer's Discord community for support and feedback\n\nPrivacy\nTwitch Auto Claim Plus runs only on Twitch pages, requires no account credentials, and does not collect or transmit any personal data."
+  },
+  "privacyPolicy": {
+    "en-US": "Twitch Auto Claim Plus does not collect, store, or transmit any personal data, to the developer or to any third party.\n\nSpecifically:\n\n- No account credentials, login information, or personal details are ever requested or accessed.\n- The extension makes no network requests of any kind — it does not use fetch, XHR, WebSockets, or any other method of sending data anywhere.\n- Your settings (auto-claim on/off, theme, accent color, chat text size) and your points-claimed total are stored only in your own browser, using the standard browser extension storage API (`chrome.storage`). If your browser's own sync feature is enabled, your settings may sync across your own devices the same way any other browser data does — this never passes through, or becomes accessible to, the developer.\n- The only external link anywhere in the extension is a plain link to the developer's public Discord server, shown in the extension's popup footer. It only opens if you click it; the extension never accesses, tracks, or otherwise interacts with it automatically.\n- The extension is active only on twitch.tv pages and does not read, modify, or transmit content from any other website.\n\nIf you have questions about this policy, you're welcome to reach out via the Discord link in the extension's popup."
   }
 }

@@ -1,50 +1,8 @@
 (() => {
   "use strict";
 
-  const THEME_PRESETS = {
-    default: "#9146ff",
-    midnight: "#63e6ff",
-    slate: "#a78bfa",
-    cyber: "#ff2bd6",
-    ember: "#ff5a3d",
-    forest: "#39d98a",
-    arctic: "#2563eb",
-    solar: "#f59e0b",
-    rose: "#ff4d8d",
-    ocean: "#00d4ff",
-    grape: "#c084fc",
-    matrix: "#a3ff12",
-    candy: "#ec4899",
-    oled: "#00ffcc"
-  };
-
-  const PREVIEW_META = {
-    default: { label: "Twitch default", desc: "Native Twitch styling." },
-    midnight: { label: "Midnight Blue", desc: "Deep navy with cyan highlights." },
-    slate: { label: "Slate Glass", desc: "Neutral graphite with violet accent." },
-    cyber: { label: "Cyber Neon", desc: "Black-purple with magenta neon." },
-    ember: { label: "Ember Red", desc: "Warm charcoal with orange-red glow." },
-    forest: { label: "Forest Green", desc: "Dark green with mint highlights." },
-    arctic: { label: "Arctic Light", desc: "Bright icy panels with blue accent." },
-    solar: { label: "Solar Gold", desc: "Warm dark theme with amber accent." },
-    rose: { label: "Rose Noir", desc: "Noir base with pink highlights." },
-    ocean: { label: "Ocean Cyan", desc: "Deep ocean blue and bright cyan." },
-    grape: { label: "Grape Pop", desc: "Purple panels with lavender accent." },
-    matrix: { label: "Matrix Lime", desc: "Terminal black with lime green." },
-    candy: { label: "Candy Light", desc: "Soft light theme with pink accent." },
-    oled: { label: "OLED Mint", desc: "True black with mint accent." }
-  };
-
-  const DEFAULTS = {
-    autoClaim: true,
-    themeEnabled: false,
-    theme: "default",
-    accent: THEME_PRESETS.default,
-    fontScale: 100
-  };
-
-  const DEPRECATED_SETTINGS_KEYS = ["logoStyle", "buttonStyle", "buttonRadius", "buttonGlow", "tagStyle"];
   const SETTINGS_KEYS = Object.keys(DEFAULTS);
+  const CLAIM_SESSION_TOTAL_KEY = "twitchToolsClaimSessionTotal";
   const $ = (id) => document.getElementById(id);
 
   const controls = {
@@ -92,28 +50,6 @@
     void chrome.runtime.lastError;
   };
 
-  const clampNumber = (value, min, max, fallback) => {
-    const number = Number(value);
-    return Number.isFinite(number) ? Math.max(min, Math.min(max, number)) : fallback;
-  };
-
-  const normaliseSettings = (settings = {}) => {
-    const merged = { ...DEFAULTS, ...settings };
-    const theme = Object.prototype.hasOwnProperty.call(THEME_PRESETS, merged.theme)
-      ? merged.theme
-      : DEFAULTS.theme;
-
-    return {
-      autoClaim: Boolean(merged.autoClaim),
-      themeEnabled: Boolean(merged.themeEnabled),
-      theme,
-      accent: /^#[0-9a-f]{6}$/i.test(merged.accent)
-        ? merged.accent
-        : (THEME_PRESETS[theme] || DEFAULTS.accent),
-      fontScale: clampNumber(merged.fontScale, 90, 115, DEFAULTS.fontScale)
-    };
-  };
-
   const setText = (element, value) => {
     if (element.textContent !== value) {
       element.textContent = value;
@@ -126,8 +62,47 @@
     setText(controls.accentHex, nextAccent);
   };
 
+  const DEFAULT_PALETTE = {
+    bg: "#0e0e10",
+    bgSoft: "#17171b",
+    bgHover: "#202028",
+    border: "rgba(255, 255, 255, 0.08)",
+    borderStrong: "rgba(255, 255, 255, 0.12)",
+    text: "#f3f3f5",
+    textSoft: "#b9b9c2",
+    textDim: "#8d8d97"
+  };
+
+  const applyPopupPalette = (settings) => {
+    const activeTheme = Boolean(settings.themeEnabled && settings.theme !== "default");
+    const preset = activeTheme ? THEME_PRESETS[settings.theme] : null;
+
+    const palette = preset
+      ? {
+          bg: preset.bg,
+          bgSoft: preset.surface,
+          bgHover: preset.surface2,
+          border: preset.border,
+          borderStrong: preset.border,
+          text: preset.text,
+          textSoft: preset.muted,
+          textDim: preset.muted
+        }
+      : DEFAULT_PALETTE;
+
+    const root = document.documentElement.style;
+    root.setProperty("--bg", palette.bg);
+    root.setProperty("--bg-soft", palette.bgSoft);
+    root.setProperty("--bg-hover", palette.bgHover);
+    root.setProperty("--border", palette.border);
+    root.setProperty("--border-strong", palette.borderStrong);
+    root.setProperty("--text", palette.text);
+    root.setProperty("--text-soft", palette.textSoft);
+    root.setProperty("--text-dim", palette.textDim);
+  };
+
   const updatePreview = () => {
-    const meta = PREVIEW_META[controls.theme.value] || PREVIEW_META.default;
+    const meta = THEME_PRESETS[controls.theme.value] || THEME_PRESETS.default;
     setText(controls.previewTitle, meta.label);
     setText(controls.previewDescription, meta.desc);
   };
@@ -138,7 +113,7 @@
   };
 
   const setUi = (settings, { syncState = true } = {}) => {
-    const next = normaliseSettings(settings);
+    const next = normalizeSettings(settings);
 
     if (syncState) {
       currentSettings = next;
@@ -151,6 +126,7 @@
     controls.fontScale.value = String(next.fontScale);
     setText(controls.fontScaleValue, `${next.fontScale}%`);
     setAccentTheme(next.accent);
+    applyPopupPalette(next);
     updateDefaultAccentState();
     updatePreview();
   };
@@ -186,9 +162,32 @@
     return Number.isFinite(number) && number >= 0 ? number.toLocaleString("en-US") : "0";
   };
 
+  // manifest.json's host_permissions/content_scripts use the "*://" match
+  // pattern, which WebExtensions defines as http-or-https (never any other
+  // scheme) - mirror that here instead of hardcoding https only, so this
+  // check can't disagree with what the content script is actually allowed
+  // to run on.
+  const isTwitchUrl = (url) => /^https?:\/\/([a-z0-9-]+\.)*twitch\.tv\//i.test(url || "");
+
   const getActiveTwitchTab = async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tab?.id && /^https:\/\/([a-z0-9-]+\.)*twitch\.tv\//i.test(tab.url || "") ? tab : null;
+    // Don't scope this to "currentWindow": when running inside the popped-out
+    // floating window (its own separate OS window, opened via
+    // chrome.windows.create), "current window" is that floating window itself,
+    // which only ever contains this extension's own popup.html tab - never the
+    // actual Twitch tab, which lives in a different browser window entirely.
+    const activeTabs = await chrome.tabs.query({ active: true });
+    const twitchTabs = activeTabs.filter((tab) => tab?.id && isTwitchUrl(tab.url));
+
+    if (!twitchTabs.length) return null;
+    if (twitchTabs.length === 1) return twitchTabs[0];
+
+    // Multiple windows each have their own active Twitch tab - prefer whichever
+    // one is in the currently focused *normal* browser window (excluding our
+    // own popup-type window, which is never the right answer here).
+    const windows = await chrome.windows.getAll();
+    const focusedNormal = windows.find((w) => w.focused && w.type === "normal");
+    const preferred = focusedNormal && twitchTabs.find((tab) => tab.windowId === focusedNormal.id);
+    return preferred || twitchTabs[0];
   };
 
   const buildOfflineStatus = () => ({
@@ -209,7 +208,7 @@
     const status = payload.status;
     const accent = status.accent || controls.accent.value || DEFAULTS.accent;
     const themeLabel = status.themeEnabled
-      ? (status.themeLabel || PREVIEW_META[status.theme]?.label || status.theme || "Custom")
+      ? (status.themeLabel || THEME_PRESETS[status.theme]?.label || status.theme || "Custom")
       : "Default";
 
     return {
@@ -302,6 +301,144 @@
     }
   };
 
+  const computeCenteredPosition = (width, height) => {
+    const availWidth = window.screen.availWidth || window.screen.width || 1280;
+    const availHeight = window.screen.availHeight || window.screen.height || 800;
+    const availLeft = window.screen.availLeft || 0;
+    const availTop = window.screen.availTop || 0;
+
+    return {
+      left: Math.round(availLeft + Math.max(0, (availWidth - width) / 2)),
+      top: Math.round(availTop + Math.max(0, (availHeight - height) / 2))
+    };
+  };
+
+  const openFloatingWindow = () => new Promise((resolve, reject) => {
+    // The toolbar action popup itself can't be dragged or repositioned by any
+    // extension API on any browser - that surface is entirely owned by the
+    // browser chrome, and no browser lets an extension window drop its native
+    // title bar either. Given that, this opens a real chrome.windows.create()
+    // window (draggable, resizable, stays open) sized to the popup's natural
+    // content dimensions - see fitFloatingWindowToContent() below, which
+    // self-corrects the exact size once the new window has actually rendered.
+    const width = FLOATING_WINDOW_WIDTH;
+    const height = 522;
+    const { left, top } = computeCenteredPosition(width, height);
+
+    try {
+      chrome.windows.create(
+        {
+          url: chrome.runtime.getURL("popup.html"),
+          type: "popup",
+          width,
+          height,
+          left,
+          top
+        },
+        (win) => {
+          clearRuntimeError();
+          if (!win?.id) {
+            reject(new Error("window creation did not return a window"));
+            return;
+          }
+          resolve(win);
+        }
+      );
+    } catch (error) {
+      reject(error);
+    }
+  });
+
+  // popup.css hardcodes html/body to exactly 388px wide (width/min-width/max-width
+  // all 388px) - the content width never actually varies, so there's no need to
+  // measure and fit it dynamically. A small buffer above that CSS floor absorbs
+  // OS-level DPI-scaling rounding when chrome.windows.update() applies the
+  // requested size (very common on Windows at 125%/150% scaling) - without it, a
+  // resize can land a couple of pixels short of 388px and get permanently stuck
+  // there, since this only runs once per window, forcing an unwanted horizontal
+  // scrollbar on every theme/content change for the rest of that window's life.
+  const FLOATING_WINDOW_WIDTH = 396;
+
+  // Set only once boot() has confirmed windowType === "popup" - left null in
+  // every other case (including the hand-off-failed fallback), so
+  // fitFloatingWindowToContent() below can trust it as a safety gate without
+  // re-querying chrome.windows.getCurrent() on every call. It fires often -
+  // once at load, then again on every ResizeObserver-triggered re-fit as
+  // themes/content change - and a window's own id/type never change during
+  // its lifetime, so re-fetching every time was a pointless round-trip.
+  let cachedFloatingWindowId = null;
+
+  const fitFloatingWindowToContent = async () => {
+    if (cachedFloatingWindowId === null) {
+      return;
+    }
+
+    try {
+      const app = document.querySelector(".app");
+      if (!app) {
+        return;
+      }
+
+      const rect = app.getBoundingClientRect();
+      const chromeWidth = Math.max(0, window.outerWidth - window.innerWidth);
+      const chromeHeight = Math.max(0, window.outerHeight - window.innerHeight);
+      const targetWidth = Math.ceil(rect.width);
+      const targetHeight = Math.ceil(rect.height);
+
+      await chrome.windows.update(cachedFloatingWindowId, {
+        width: targetWidth + chromeWidth,
+        height: targetHeight + chromeHeight
+      });
+
+      // OS-level DPI scaling (125%/150%, common on Windows) can round the
+      // requested size down by a couple of physical pixels. Measure what we
+      // actually got rather than always padding the request - padding
+      // unconditionally avoids the shortfall but leaves a permanent visible
+      // gap of body background past .app's right edge on every system where
+      // the rounding issue never happens, which is the common case. Only
+      // nudge further if a real shortfall shows up.
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const widthShortfall = targetWidth - window.innerWidth;
+      if (widthShortfall > 0) {
+        await chrome.windows.update(cachedFloatingWindowId, {
+          width: targetWidth + chromeWidth + widthShortfall + 2
+        });
+      }
+    } catch {
+      // Best effort only - if window sizing APIs misbehave for any reason,
+      // the window is still fully usable, just possibly not pixel-perfect.
+    }
+  };
+
+  // The initial fit only captures whichever theme happens to be active the
+  // moment the window opens. Switching themes afterward can change the
+  // description text's wrapped line count (some descriptions are longer than
+  // others), which changes .app's natural height without ever re-fitting the
+  // window - the content then overflows the stale fixed height, triggering a
+  // vertical scrollbar, which itself eats into the horizontal space and can
+  // trigger a horizontal one too. A ResizeObserver re-fits on every actual
+  // size change instead of only once, so this stays correct across every
+  // theme rather than just whichever one loaded first.
+  let contentResizeWatcherInstalled = false;
+  const watchContentSizeForFloatingWindow = () => {
+    if (contentResizeWatcherInstalled) {
+      return;
+    }
+
+    const app = document.querySelector(".app");
+    if (!app || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    contentResizeWatcherInstalled = true;
+    let debounceTimer = 0;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => { fitFloatingWindowToContent(); }, 80);
+    });
+    observer.observe(app);
+  };
+
   const resetPointsTotal = async () => {
     const tab = await getActiveTwitchTab();
     if (!tab) {
@@ -339,7 +476,7 @@
   });
 
   const saveSettings = (settings, message = "Saved") => {
-    const next = normaliseSettings({ ...currentSettings, ...settings });
+    const next = normalizeSettings({ ...currentSettings, ...settings });
     currentSettings = next;
 
     window.clearTimeout(saveTimer);
@@ -353,7 +490,7 @@
     }, 90);
   };
 
-  const readUiSettings = () => normaliseSettings({
+  const readUiSettings = () => normalizeSettings({
     ...currentSettings,
     autoClaim: controls.autoClaim.checked,
     themeEnabled: controls.themeEnabled.checked,
@@ -363,15 +500,15 @@
   });
 
   const applyDefaultAccent = () => {
-    const next = normaliseSettings({ ...readUiSettings(), accent: DEFAULTS.accent });
+    const next = normalizeSettings({ ...readUiSettings(), accent: DEFAULTS.accent });
     setUi(next);
     saveSettings(next, "Accent restored");
   };
 
   const applyPresetAccent = () => {
-    const next = normaliseSettings({
+    const next = normalizeSettings({
       ...readUiSettings(),
-      accent: THEME_PRESETS[controls.theme.value] || DEFAULTS.accent
+      accent: THEME_PRESETS[controls.theme.value]?.accent || DEFAULTS.accent
     });
     setUi(next);
     saveSettings(next, "Accent preset set");
@@ -379,11 +516,11 @@
 
   const setThemePreset = (theme) => {
     const selectedTheme = Object.prototype.hasOwnProperty.call(THEME_PRESETS, theme) ? theme : DEFAULTS.theme;
-    const next = normaliseSettings({
+    const next = normalizeSettings({
       ...readUiSettings(),
       theme: selectedTheme,
       themeEnabled: selectedTheme !== "default",
-      accent: THEME_PRESETS[selectedTheme] || DEFAULTS.accent
+      accent: THEME_PRESETS[selectedTheme]?.accent || DEFAULTS.accent
     });
     setUi(next);
     saveSettings(next, next.themeEnabled ? "Theme changed" : "Default restored");
@@ -395,6 +532,18 @@
   };
 
   const syncFromStorageChanges = (changes, areaName) => {
+    if (areaName === "local") {
+      // Points total changed elsewhere - another Twitch tab claiming, a claim
+      // happening on the Twitch tab while this window just sits open, a reset
+      // triggered from the overlay panel, etc. Refresh the whole status view
+      // (not just the points number) so lastClaim stays consistent with it,
+      // rather than showing a fresh total next to a stale claim time.
+      if (Object.prototype.hasOwnProperty.call(changes, CLAIM_SESSION_TOTAL_KEY)) {
+        fetchStatus();
+      }
+      return;
+    }
+
     if (areaName !== "sync" || isHydrating) {
       return;
     }
@@ -415,7 +564,7 @@
       return;
     }
 
-    const synced = normaliseSettings(next);
+    const synced = normalizeSettings(next);
     if (JSON.stringify(synced) === JSON.stringify(currentSettings)) {
       return;
     }
@@ -431,11 +580,11 @@
       const current = readUiSettings();
       const patch = controls.themeEnabled.checked
         ? (current.theme === "default"
-            ? { themeEnabled: true, theme: "midnight", accent: THEME_PRESETS.midnight }
+            ? { themeEnabled: true, theme: "midnight", accent: THEME_PRESETS.midnight.accent }
             : { themeEnabled: true })
         : { themeEnabled: false };
 
-      const next = normaliseSettings({ ...current, ...patch });
+      const next = normalizeSettings({ ...current, ...patch });
       setUi(next);
       saveSettings(next, next.themeEnabled ? "Theme enabled" : "Theme disabled");
     });
@@ -479,6 +628,10 @@
       isHydrating = false;
       startRelativeTimeUpdates();
       await fetchStatus();
+      requestAnimationFrame(() => {
+        fitFloatingWindowToContent();
+        watchContentSizeForFloatingWindow();
+      });
     });
 
     window.addEventListener("beforeunload", () => {
@@ -489,5 +642,41 @@
     });
   };
 
-  initialise();
+  const boot = async () => {
+    // Figure out whether this popup.html load is the anchored toolbar popup
+    // or the already-floating window (our own chrome.windows.create() window,
+    // type "popup"). If it's the anchored popup, hand off immediately instead
+    // of rendering here - skip straight to opening the floating window and
+    // closing this one, before doing any other setup work.
+    let windowType = "normal";
+    let currentWindowId = null;
+    try {
+      const win = await chrome.windows.getCurrent();
+      windowType = win?.type || "normal";
+      currentWindowId = win?.id ?? null;
+    } catch {
+      windowType = "normal";
+    }
+
+    if (windowType !== "popup") {
+      try {
+        await openFloatingWindow();
+        window.close();
+        return;
+      } catch {
+        // If the hand-off fails for any reason (window APIs unavailable,
+        // creation rejected, etc.), fall back to rendering normally in place
+        // rather than leaving a dead, blank popup with no way to recover.
+        // windowType is still "normal" here, so cachedFloatingWindowId stays
+        // null and fitFloatingWindowToContent() correctly stays a no-op -
+        // this is the user's actual browser window, not ours to resize.
+      }
+    } else {
+      cachedFloatingWindowId = currentWindowId;
+    }
+
+    await initialise();
+  };
+
+  boot();
 })();

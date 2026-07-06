@@ -1,196 +1,6 @@
 (() => {
   "use strict";
 
-  const THEME_PRESETS = {
-    default: { label: "Twitch Default", accent: "#9146ff" },
-    midnight: {
-      label: "Midnight Blue",
-      accent: "#63e6ff",
-      bg: "#030817",
-      base: "#071228",
-      surface: "#0d1f3f",
-      surface2: "#14345f",
-      input: "#081733",
-      text: "#f3f8ff",
-      muted: "#9fb6d8",
-      border: "#24466f",
-      buttonText: "#001018"
-    },
-    slate: {
-      label: "Slate Glass",
-      accent: "#a78bfa",
-      bg: "#111827",
-      base: "#182131",
-      surface: "#253247",
-      surface2: "#334155",
-      input: "#1f2937",
-      text: "#f8fafc",
-      muted: "#cbd5e1",
-      border: "#475569",
-      buttonText: "#0f172a"
-    },
-    cyber: {
-      label: "Cyber Neon",
-      accent: "#ff2bd6",
-      bg: "#07000d",
-      base: "#11001f",
-      surface: "#230044",
-      surface2: "#3a0872",
-      input: "#1a0030",
-      text: "#fff2ff",
-      muted: "#dda6ff",
-      border: "#7e22ce",
-      buttonText: "#ffffff"
-    },
-    ember: {
-      label: "Ember Red",
-      accent: "#ff5a3d",
-      bg: "#140504",
-      base: "#210a06",
-      surface: "#3a130c",
-      surface2: "#5a2113",
-      input: "#2b0e08",
-      text: "#fff4ed",
-      muted: "#f5b49c",
-      border: "#7c331f",
-      buttonText: "#ffffff"
-    },
-    forest: {
-      label: "Forest Green",
-      accent: "#39d98a",
-      bg: "#031009",
-      base: "#071a0f",
-      surface: "#102a19",
-      surface2: "#1d482b",
-      input: "#0a2113",
-      text: "#effff5",
-      muted: "#a8dcb8",
-      border: "#2f6f44",
-      buttonText: "#001208"
-    },
-    arctic: {
-      label: "Arctic Light",
-      accent: "#2563eb",
-      bg: "#edf6ff",
-      base: "#f8fbff",
-      surface: "#dcecff",
-      surface2: "#c1dcff",
-      input: "#ffffff",
-      text: "#0b1220",
-      muted: "#52657f",
-      border: "#9bb7dc",
-      buttonText: "#ffffff"
-    },
-    solar: {
-      label: "Solar Gold",
-      accent: "#f59e0b",
-      bg: "#171006",
-      base: "#241808",
-      surface: "#3b270b",
-      surface2: "#614012",
-      input: "#2d1d08",
-      text: "#fff7e2",
-      muted: "#edc978",
-      border: "#855d1a",
-      buttonText: "#170d00"
-    },
-    rose: {
-      label: "Rose Noir",
-      accent: "#ff4d8d",
-      bg: "#14040d",
-      base: "#220817",
-      surface: "#3a1029",
-      surface2: "#5a1b42",
-      input: "#2b0b1f",
-      text: "#fff2f8",
-      muted: "#f4a9cc",
-      border: "#84345f",
-      buttonText: "#ffffff"
-    },
-    ocean: {
-      label: "Ocean Cyan",
-      accent: "#00d4ff",
-      bg: "#001018",
-      base: "#021923",
-      surface: "#062f42",
-      surface2: "#0b4d68",
-      input: "#042331",
-      text: "#edfcff",
-      muted: "#9de8f7",
-      border: "#137190",
-      buttonText: "#001018"
-    },
-    grape: {
-      label: "Grape Pop",
-      accent: "#c084fc",
-      bg: "#10051d",
-      base: "#1b0a30",
-      surface: "#32135a",
-      surface2: "#4c1d95",
-      input: "#251044",
-      text: "#fbf5ff",
-      muted: "#d8b4fe",
-      border: "#6d28d9",
-      buttonText: "#ffffff"
-    },
-    matrix: {
-      label: "Matrix Lime",
-      accent: "#a3ff12",
-      bg: "#020700",
-      base: "#071000",
-      surface: "#102400",
-      surface2: "#1e3f05",
-      input: "#0a1800",
-      text: "#f4ffe8",
-      muted: "#b9f48a",
-      border: "#407012",
-      buttonText: "#061000"
-    },
-    candy: {
-      label: "Candy Light",
-      accent: "#ec4899",
-      bg: "#fff1f7",
-      base: "#fff7fb",
-      surface: "#ffd9ec",
-      surface2: "#ffc1df",
-      input: "#ffffff",
-      text: "#2b1020",
-      muted: "#7c3a58",
-      border: "#f9a8d4",
-      buttonText: "#ffffff"
-    },
-    oled: {
-      label: "OLED Mint",
-      accent: "#00ffcc",
-      bg: "#000000",
-      base: "#030303",
-      surface: "#0b0b0b",
-      surface2: "#171717",
-      input: "#080808",
-      text: "#f8f8f8",
-      muted: "#b9b9b9",
-      border: "#2a2a2a",
-      buttonText: "#00130f"
-    }
-  };
-
-  const DEFAULTS = {
-    autoClaim: true,
-    themeEnabled: false,
-    theme: "default",
-    accent: THEME_PRESETS.default.accent,
-    fontScale: 100
-  };
-
-  const NATIVE_PALETTE = {
-    text: "#efeff1",
-    muted: "#adadb8",
-    border: "#34343b",
-    surface2: "#18181b",
-    input: "#18181b",
-    buttonText: "#ffffff"
-  };
-
   const STYLE_ID = "twitch-tools-theme-style";
   const NAV_STYLE_ID = "twitch-tools-nav-style";
   const NAV_BUTTON_ID = "twitch-tools-nav-button";
@@ -200,12 +10,12 @@
   const SCAN_INTERVAL_MS = 15000;
   const CLAIM_MUTATION_THROTTLE_MS = 2500;
   const SETTINGS_KEYS = Object.keys(DEFAULTS);
-  const DEPRECATED_SETTINGS_KEYS = ["logoStyle","buttonStyle","buttonRadius","buttonGlow","tagStyle"];
   const CLAIM_SESSION_TOTAL_KEY = "twitchToolsClaimSessionTotal";
 
   let settings = { ...DEFAULTS };
   let lastClaimAt = 0;
   let lastClaimAmount = 0;
+  let lastClaimSource = null; // "text" | "points-add-indicator" | null - which method supplied lastClaimAmount, for diagnostics
   let totalClaimedPoints = 0;
   let scanTimer = null;
   let observer = null;
@@ -266,31 +76,13 @@
       const next = latestAcrossTabs + amount;
       totalClaimedPoints = next;
       safeLocalSet({ [CLAIM_SESSION_TOTAL_KEY]: next });
+      renderNavPanel();
     });
   };
 
   const resetPointsTotal = () => {
     totalClaimedPoints = 0;
     safeLocalSet({ [CLAIM_SESSION_TOTAL_KEY]: 0 });
-  };
-
-  const clampNumber = (value, min, max, fallback) => {
-    const number = Number(value);
-    if (!Number.isFinite(number)) return fallback;
-    return Math.max(min, Math.min(max, number));
-  };
-
-  const normalizeSettings = (raw) => {
-    const next = { ...DEFAULTS, ...(raw || {}) };
-    if (!Object.prototype.hasOwnProperty.call(THEME_PRESETS, next.theme)) next.theme = DEFAULTS.theme;
-
-    next.autoClaim = Boolean(next.autoClaim);
-    next.themeEnabled = Boolean(next.themeEnabled);
-    next.accent = /^#[0-9a-f]{6}$/i.test(next.accent)
-      ? next.accent
-      : (THEME_PRESETS[next.theme]?.accent || DEFAULTS.accent);
-    next.fontScale = clampNumber(next.fontScale, 90, 115, DEFAULTS.fontScale);
-    return next;
   };
 
   const isVisible = (element) => {
@@ -424,6 +216,76 @@
 
   const isDashboardHost = () => /(^|\.)dashboard\.twitch\.tv$/i.test(location.hostname);
 
+  // Twitch's actual claim button never carries the reward size in its own
+  // accessible text - a real capture from live Twitch shows aria-label is
+  // just "Claim Bonus" with no data-test-selector, no data-a-target, and no
+  // text at all, so extractClaimAmount above only pays off on a hypothetical
+  // UI variant that embeds a number; in the ordinary case it returns 0.
+  //
+  // An earlier version of this file tried to infer the claimed amount by
+  // reading the viewer's persistent points balance before and after a claim
+  // and diffing the two. Confirmed against a real capture that this doesn't
+  // work: Twitch renders that balance in abbreviated form once it's large
+  // enough ("61.1K", not "61,100"), which never matched a plain-number read,
+  // and even if parsed, a rounded display can't reliably reveal a change as
+  // small as a single claim - "61.1K" covers a range of exact values wider
+  // than most bonus sizes, so a diff against it would often be silently wrong
+  // rather than silently missing, which is worse.
+  //
+  // The same capture showed a better, exact signal instead: Twitch shows a
+  // "+<amount>" indicator (seen as class community-points-summary__points-add-text)
+  // in the community-points-summary widget when points are earned - literally
+  // "+60" for a 60-point claim. That's read directly below, not inferred from
+  // a diff of anything.
+  const POINTS_ADD_SELECTORS = [
+    '[class*="points-add-text" i]',
+    '[class*="community-points-summary__points-add" i]',
+    '[data-test-selector*="points-add" i]'
+  ];
+
+  const POINTS_ADD_PATTERN = /^\+\s*(\d[\d,]*)/;
+  const POINTS_ADD_POLL_INTERVAL_MS = 200;
+  const POINTS_ADD_POLL_TIMEOUT_MS = 3000;
+
+  // Returns the raw "+N" text currently visible (or null) - claimBonus needs
+  // the raw text, not just a parsed number, to tell "nothing here" apart from
+  // "the same leftover indicator from an earlier claim is still on screen."
+  const readPointsAddText = () => {
+    for (const selector of POINTS_ADD_SELECTORS) {
+      for (const el of document.querySelectorAll(selector)) {
+        const text = (el.textContent || "").trim();
+        if (POINTS_ADD_PATTERN.test(text)) return text;
+      }
+    }
+    return null;
+  };
+
+  // Polls for the indicator to appear (or change, if one was already present
+  // from an earlier claim) instead of checking once after a fixed delay -
+  // it's a brief animated toast, not a persistent value, so exact timing
+  // varies claim to claim. Stops as soon as it finds a new one, or gives up
+  // after POINTS_ADD_POLL_TIMEOUT_MS (comfortably inside CLAIM_COOLDOWN_MS,
+  // so two polling windows can never overlap).
+  const watchForPointsAdd = (previousText, onResolved) => {
+    const deadline = Date.now() + POINTS_ADD_POLL_TIMEOUT_MS;
+
+    const check = () => {
+      const text = readPointsAddText();
+      if (text && text !== previousText) {
+        const amount = parsePointsNumber((text.match(POINTS_ADD_PATTERN) || [])[1] || "");
+        onResolved(amount > 0 ? amount : null);
+        return;
+      }
+      if (Date.now() >= deadline) {
+        onResolved(null);
+        return;
+      }
+      window.setTimeout(check, POINTS_ADD_POLL_INTERVAL_MS);
+    };
+
+    check();
+  };
+
   const claimBonus = () => {
     if (!settings.autoClaim) return;
     if (isDashboardHost()) return;
@@ -432,14 +294,33 @@
     const button = candidateButtons()[0];
     if (!button) return;
 
-    const amount = extractClaimAmount(button);
     lastClaimAt = Date.now();
-    lastClaimAmount = amount;
-    if (amount > 0) {
-      totalClaimedPoints += amount;
-      persistClaimSessionTotal(amount);
-    }
+
+    const textAmount = extractClaimAmount(button);
+    // Only worth capturing this up-front if we'll actually need it - skip it
+    // entirely on the fast path where the button's own text already gave us
+    // a usable number.
+    const previousPointsAddText = textAmount > 0 ? null : readPointsAddText();
+
     button.click();
+
+    if (textAmount > 0) {
+      lastClaimAmount = textAmount;
+      lastClaimSource = "text";
+      totalClaimedPoints += textAmount;
+      renderNavPanel();
+      persistClaimSessionTotal(textAmount);
+      return;
+    }
+
+    watchForPointsAdd(previousPointsAddText, (amount) => {
+      if (amount === null) return; // Nothing usable found - leave the total untouched rather than guess.
+      lastClaimAmount = amount;
+      lastClaimSource = "points-add-indicator";
+      totalClaimedPoints += amount;
+      renderNavPanel();
+      persistClaimSessionTotal(amount);
+    });
   };
 
   const queueClaimScan = (delay = CLAIM_MUTATION_THROTTLE_MS) => {
@@ -629,17 +510,13 @@
     `;
   };
 
-  const interfaceCss = (_s, _p, accent, { includeAccentVars = true } = {}) => {
-    return includeAccentVars ? accentCss(accent) : "";
-  };
-
   const themeCss = (rawSettings) => {
     const s = normalizeSettings(rawSettings);
     const tuningCss = chatTuningCss(s);
     const activeTheme = Boolean(s.themeEnabled && s.theme !== "default");
-    const p = activeTheme ? (THEME_PRESETS[s.theme] || THEME_PRESETS.midnight) : NATIVE_PALETTE;
+    const p = activeTheme ? (THEME_PRESETS[s.theme] || THEME_PRESETS.midnight) : null;
     const accent = s.accent;
-    const looseStyling = interfaceCss(s, p, accent, { includeAccentVars: !activeTheme });
+    const looseStyling = !activeTheme ? accentCss(accent) : "";
 
     // Dedicated, uniquely-prefixed variables for our own injected UI (the nav
     // panel). Always set explicitly here, in both branches, so that UI never
@@ -752,7 +629,6 @@ ${tuningCss}`;
         color: ${p.buttonText} !important;
       }
 
-      ${interfaceCss(s, p, accent, { includeAccentVars: false })}
       ${chatCss(p)}
       ${tuningCss}
     `;
@@ -807,6 +683,18 @@ ${tuningCss}`;
       #${NAV_PANEL_ID}[hidden] {
         display: none;
       }
+      #${NAV_PANEL_ID} .ttnp-arrow {
+        position: absolute;
+        top: -7px;
+        left: 20px;
+        width: 12px;
+        height: 12px;
+        background: var(--twitch-tools-panel-bg, #0e0e10);
+        border-left: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.12));
+        border-top: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.12));
+        transform: rotate(45deg);
+        border-radius: 2px 0 0 0;
+      }
       #${NAV_PANEL_ID} * {
         box-sizing: border-box;
         font-family: inherit;
@@ -854,10 +742,6 @@ ${tuningCss}`;
       }
       #${NAV_PANEL_ID} .ttnp-label {
         color: var(--twitch-tools-panel-muted, #b9b9c2);
-      }
-      #${NAV_PANEL_ID} .ttnp-meta {
-        color: var(--twitch-tools-panel-muted, #8d8d97);
-        font-weight: 400;
       }
       #${NAV_PANEL_ID} .ttnp-value-group {
         display: inline-flex;
@@ -930,13 +814,6 @@ ${tuningCss}`;
         border: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.12));
         background-color: var(--twitch-tools-panel-input-bg, #17171b);
       }
-      #${NAV_PANEL_ID} .ttnp-footer {
-        margin-top: 8px;
-        padding-top: 8px;
-        border-top: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.08));
-        color: var(--twitch-tools-panel-muted, #8d8d97);
-        font-size: 11px;
-      }
     `;
     document.documentElement.appendChild(style);
   };
@@ -986,16 +863,14 @@ ${tuningCss}`;
   };
 
   const buildNavPanelElement = () => {
+    const arrow = createEl("div", { className: "ttnp-arrow" });
+
     const header = createEl("div", { className: "ttnp-header" }, [
       createEl("img", { className: "ttnp-logo", attrs: { alt: "", src: chrome.runtime.getURL("icons/icon32.png") } }),
       createEl("span", { className: "ttnp-title", text: "Twitch Auto Claim Plus" })
     ]);
 
-    const pointsLabel = createEl("span", { className: "ttnp-label" });
-    pointsLabel.append(
-      "Points claimed ",
-      createEl("span", { className: "ttnp-meta", text: "(all-time)" })
-    );
+    const pointsLabel = createEl("span", { className: "ttnp-label", text: "Points claimed" });
 
     const resetButton = createEl("button", {
       className: "ttnp-icon-btn",
@@ -1035,11 +910,9 @@ ${tuningCss}`;
       themeSelect
     ]);
 
-    const footer = createEl("div", { className: "ttnp-footer", text: "More options in the toolbar popup" });
-
     const panel = createEl("div", { id: NAV_PANEL_ID });
     panel.hidden = true;
-    panel.append(header, pointsRow, autoClaimRow, themeRow, footer);
+    panel.append(arrow, header, pointsRow, autoClaimRow, themeRow);
     return panel;
   };
 
@@ -1067,10 +940,33 @@ ${tuningCss}`;
 
     const rect = button.getBoundingClientRect();
     const panelWidth = panel.offsetWidth || 260;
-    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - panelWidth / 2, window.innerWidth - panelWidth - 8));
+
+    // Anchor the panel's left edge near the button's left edge (nudged a few
+    // px right so it reads as attached rather than centered under it).
+    const desiredLeft = rect.left - 12;
+
+    // Twitch's left side-nav rail (channel list, "For You", etc.) can extend
+    // well past the button's own x-position. Keep the panel clear of it when
+    // it's present, rather than letting it sit on top of that content.
+    const sideNav = document.querySelector('[data-a-target="side-nav-bar"]');
+    const sideNavRight = sideNav ? sideNav.getBoundingClientRect().right : 0;
+    const minLeft = sideNavRight > 0 ? sideNavRight + 8 : 8;
+
+    const left = Math.max(minLeft, Math.min(desiredLeft, window.innerWidth - panelWidth - 8));
 
     panel.style.top = `${Math.round(rect.bottom + 8)}px`;
     panel.style.left = `${Math.round(left)}px`;
+
+    // The connector arrow always points at the button's true horizontal
+    // center, independent of any clamping applied to the panel itself, so it
+    // still looks correctly attached even when the panel gets nudged to stay
+    // clear of the sidebar or the viewport edge.
+    const arrow = panel.querySelector(".ttnp-arrow");
+    if (arrow) {
+      const buttonCenter = rect.left + rect.width / 2;
+      const arrowLeft = Math.max(14, Math.min(buttonCenter - left - 6, panelWidth - 26));
+      arrow.style.left = `${Math.round(arrowLeft)}px`;
+    }
   };
 
   const closeNavPanel = () => {
@@ -1228,6 +1124,7 @@ ${tuningCss}`;
     fontScale: settings.fontScale,
     lastClaimAt,
     lastClaimAmount,
+    lastClaimSource,
     totalClaimedPoints,
     visibleBonusButtons: isDashboardHost() ? 0 : candidateButtons().length
   });
@@ -1268,19 +1165,32 @@ ${tuningCss}`;
   });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "sync") return;
-    let changed = false;
-    const next = { ...settings };
+    if (areaName === "sync") {
+      let changed = false;
+      const next = { ...settings };
 
-    for (const key of SETTINGS_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(changes, key)) {
-        next[key] = changes[key].newValue;
-        changed = true;
+      for (const key of SETTINGS_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(changes, key)) {
+          next[key] = changes[key].newValue;
+          changed = true;
+        }
       }
+
+      if (changed) {
+        applyRuntimeState(next);
+      }
+      return;
     }
 
-    if (changed) {
-      applyRuntimeState(next);
+    if (areaName === "local" && Object.prototype.hasOwnProperty.call(changes, CLAIM_SESSION_TOTAL_KEY)) {
+      // Keeps this tab's panel in sync even when the points total changed
+      // elsewhere - another Twitch tab claiming a bonus, a reset triggered
+      // from the popup/floating window, etc.
+      const nextTotal = Number(changes[CLAIM_SESSION_TOTAL_KEY].newValue) || 0;
+      if (nextTotal !== totalClaimedPoints) {
+        totalClaimedPoints = nextTotal;
+        renderNavPanel();
+      }
     }
   });
 
