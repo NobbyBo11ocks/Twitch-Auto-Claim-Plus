@@ -23,9 +23,9 @@
 html,
 body {
   margin: 0;
-  width: 388px;
-  min-width: 388px;
-  max-width: 388px;
+  width: 600px;
+  min-width: 600px;
+  max-width: 600px;
   background:
     radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 18%, transparent), transparent 42%),
     linear-gradient(180deg, var(--bg) 0%, var(--bg-soft) 100%);
@@ -63,6 +63,95 @@ input[type="checkbox"] {
   background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   box-shadow: var(--shadow);
   overflow: hidden;
+}
+
+.app-body {
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+
+.sidenav {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 168px;
+  gap: 2px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.sidenav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.sidenav-icon {
+  flex: 0 0 auto;
+  color: inherit;
+}
+
+.sidenav-item span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidenav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.sidenav-item[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--text);
+}
+
+.sidenav-item[aria-current="page"] .sidenav-icon {
+  color: var(--accent);
+}
+
+.sidenav-item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* Fixed (not max-) height - every tab renders at the same size on purpose,
+   so the floating window doesn't visibly grow/shrink when switching tabs.
+   Tabs with less content than this just leave breathing room below; tabs
+   with more (e.g. a long ignored-users list) scroll within this box instead
+   of resizing the window. Sidenav stretches to match via the .app-body row's
+   default align-items: stretch. */
+.panels {
+  flex: 1;
+  min-width: 0;
+  height: 440px;
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panel[hidden] {
+  display: none;
 }
 
 .footer {
@@ -149,34 +238,232 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 
-.content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px 12px;
+.icon-button[hidden] {
+  display: none;
 }
 
-.status-panel,
-.controls {
+.text-input {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+  background: var(--bg-soft);
+  color: var(--text);
+  font-size: 13px;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.text-input:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--bg-hover);
+}
+
+.text-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+#ignoredUserForm {
+  flex-wrap: nowrap;
+}
+
+#ignoredUserInput {
+  flex: 1;
+  min-width: 0;
+}
+
+#renamedUserInput,
+#renamedNameInput {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.declutter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 10px;
+}
+
+.declutter-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.declutter-item:hover {
+  color: var(--text);
+}
+
+.declutter-item input {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.declutter-item input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+.declutter-select-all {
+  width: 100%;
+  margin-bottom: 2px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.link-button {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-button:hover {
+  color: var(--text);
+}
+
+.link-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+.bulk-add-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bulk-add-panel[hidden] {
+  display: none;
+}
+
+.text-area {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  resize: vertical;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.text-area:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--bg-hover);
+}
+
+.text-area:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip-list:empty {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 6px 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
+.chip-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.chip-remove:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--danger);
+}
+
+.chip-remove:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+#ignoredUsersList:not(:empty) + #ignoredUsersEmpty {
+  display: none;
+}
+
+#renamedUsersList:not(:empty) + #renamedUsersEmpty {
+  display: none;
+}
+
+.chip-arrow {
+  color: var(--text-dim);
+  font-weight: 400;
 }
 
 .status-panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
   padding: 10px 12px;
 }
 
-.controls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+.warning-banner {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.warning-banner[hidden] {
+  display: none;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 6px 16px;
 }
 
@@ -266,6 +553,15 @@ input[type="checkbox"] {
   font-size: 13px;
   font-weight: 800;
   line-height: 1.2;
+}
+
+.count-chip {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
 }
 
 .control-meta {
@@ -397,8 +693,6 @@ input[type="checkbox"] {
 
 .stat-value,
 .footer-status,
-#statusTheme,
-#statusAccent,
 #statusLastClaim {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -409,9 +703,13 @@ input[type="checkbox"] {
   .mini-button,
   .select,
   .color-input,
+  .text-input,
+  .text-area,
+  .chip-remove,
   .slider,
   .slider::before,
-  .stat-reset-button {
+  .stat-reset-button,
+  .sidenav-item {
     transition: none;
   }
 }

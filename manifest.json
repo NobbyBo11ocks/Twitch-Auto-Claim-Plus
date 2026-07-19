@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Twitch Auto Claim Plus",
-  "version": "1.0.4",
+  "version": "1.1.1",
   "description": "Created By NobbyBollocks. Twitch Auto Claim Plus.",
   "permissions": [
     "storage",
@@ -11,6 +11,12 @@
     "*://twitch.tv/*",
     "*://*.twitch.tv/*"
   ],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": [
+      "background.js"
+    ]
+  },
   "content_scripts": [
     {
       "matches": [
@@ -19,6 +25,7 @@
       ],
       "js": [
         "theme-presets.js",
+        "declutter-options.js",
         "settings-schema.js",
         "content.js"
       ],

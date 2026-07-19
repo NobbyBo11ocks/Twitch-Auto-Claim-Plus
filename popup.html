@@ -8,118 +8,273 @@
 </head>
 <body>
   <main class="app">
-    <div class="content">
-      <section class="status-panel" aria-live="off" aria-atomic="true">
-        <div class="stats-grid">
-          <div class="stat stat-hero">
-            <span class="stat-label">Points claimed</span>
-            <span class="stat-hero-value">
-              <strong id="statusTotalPoints" class="stat-value stat-value--hero">—</strong>
-              <button id="resetPoints" class="stat-reset-button" type="button" title="Reset points counter" aria-label="Reset points counter">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                  <path d="M10 11v6"></path>
-                  <path d="M14 11v6"></path>
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
-                </svg>
-              </button>
-            </span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Auto-claim</span>
-            <strong id="statusAutoClaim" class="stat-value">—</strong>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Theme</span>
-            <strong id="statusTheme" class="stat-value">—</strong>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Accent</span>
-            <strong id="statusAccent" class="stat-value">—</strong>
-          </div>
-          <div class="stat">
-            <span class="stat-label">Last claim</span>
-            <strong id="statusLastClaim" class="stat-value">—</strong>
-          </div>
-        </div>
-      </section>
+    <div class="app-body">
+      <nav class="sidenav" id="sidenav" aria-label="Sections">
+        <button class="sidenav-item" data-tab="status" type="button" aria-current="page">
+          <svg class="sidenav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7v10"></path>
+            <path d="M8 12h8"></path>
+          </svg>
+          <span>Points</span>
+        </button>
+        <button class="sidenav-item" data-tab="appearance" type="button">
+          <svg class="sidenav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+          </svg>
+          <span>Appearance</span>
+        </button>
+        <button class="sidenav-item" data-tab="declutter" type="button">
+          <svg class="sidenav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94"></path>
+            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path>
+            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+          <span>Hide on Twitch</span>
+        </button>
+        <button class="sidenav-item" data-tab="users" type="button">
+          <svg class="sidenav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          <span>Users</span>
+        </button>
+        <button class="sidenav-item" data-tab="backup" type="button">
+          <svg class="sidenav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Backup</span>
+        </button>
+      </nav>
 
-      <section class="controls">
-        <div class="control-row">
-          <div class="control-copy">
-            <span class="control-title">Auto-claim</span>
-            <span class="control-meta">Channel points bonus</span>
+      <div class="panels" id="panels">
+        <section class="panel" data-panel="status">
+          <section class="status-panel" aria-live="off" aria-atomic="true">
+            <div class="stats-grid">
+              <div class="stat stat-hero">
+                <span class="stat-label">Points claimed</span>
+                <span class="stat-hero-value">
+                  <strong id="statusTotalPoints" class="stat-value stat-value--hero">—</strong>
+                  <button id="resetPoints" class="stat-reset-button" type="button" title="Reset points counter" aria-label="Reset points counter">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                      <path d="M10 11v6"></path>
+                      <path d="M14 11v6"></path>
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                    </svg>
+                  </button>
+                </span>
+              </div>
+              <div class="stat">
+                <span class="stat-label">Last claim</span>
+                <strong id="statusLastClaim" class="stat-value">—</strong>
+              </div>
+            </div>
+          </section>
+
+          <div id="staleClaimWarning" class="warning-banner" role="status" hidden>
+            A bonus button has stayed on screen without being claimed. Twitch may have changed something - let us know on Discord if this keeps happening.
           </div>
-          <label class="switch">
-            <input id="autoClaim" type="checkbox" />
-            <span class="slider"></span>
-          </label>
-        </div>
 
-        <div class="control-row">
-          <div class="control-copy">
-            <span class="control-title">Theme</span>
-            <span class="control-meta">Custom Twitch theme</span>
-          </div>
-          <label class="switch">
-            <input id="themeEnabled" type="checkbox" />
-            <span class="slider"></span>
-          </label>
-        </div>
-
-        <div class="control-stack">
-          <label class="control-copy" for="theme">
-            <span class="control-title">Preset</span>
-            <span id="previewTitle" class="control-meta">Twitch Default</span>
-          </label>
-          <select id="theme" class="select">
-            <option value="default">Twitch Default</option>
-            <option value="midnight">Midnight Blue</option>
-            <option value="slate">Slate Glass</option>
-            <option value="cyber">Cyber Neon</option>
-            <option value="ember">Ember Red</option>
-            <option value="forest">Forest Green</option>
-            <option value="arctic">Arctic Light</option>
-            <option value="solar">Solar Gold</option>
-            <option value="rose">Rose Noir</option>
-            <option value="ocean">Ocean Cyan</option>
-            <option value="grape">Grape Pop</option>
-            <option value="matrix">Matrix Lime</option>
-            <option value="candy">Candy Light</option>
-            <option value="oled">OLED Mint</option>
-            <option value="graphite">Graphite Mono</option>
-            <option value="paper">Paper Light</option>
-          </select>
-        </div>
-
-        <div class="control-stack">
-          <label class="control-copy" for="accent">
-            <span class="control-title">Accent</span>
-            <span id="previewDescription" class="control-meta">Native Twitch styling.</span>
-          </label>
-          <div class="inline-controls">
-            <input id="accent" class="color-input" type="color" value="#9146ff" />
-            <output id="accentHex" class="value-chip">#9146FF</output>
-            <button id="presetAccent" class="mini-button" type="button">Use preset</button>
-            <label class="checkbox-chip">
-              <input id="defaultAccent" type="checkbox" />
-              <span>Default accent</span>
+          <div class="control-row">
+            <div class="control-copy">
+              <span class="control-title">Auto-claim</span>
+              <span class="control-meta">Channel points bonus</span>
+            </div>
+            <label class="switch">
+              <input id="autoClaim" type="checkbox" />
+              <span class="slider"></span>
             </label>
           </div>
-        </div>
 
-        <div class="control-stack">
-          <label class="control-copy" for="fontScale">
-            <span class="control-title">Chat size</span>
-            <span class="control-meta">Message text only</span>
-          </label>
-          <div class="range-row">
-            <input id="fontScale" class="range-input" type="range" min="90" max="115" step="1" value="100" />
-            <span id="fontScaleValue" class="value-chip">100%</span>
+        </section>
+
+        <section class="panel" data-panel="appearance" hidden>
+          <div class="control-row">
+            <div class="control-copy">
+              <span class="control-title">Theme</span>
+              <span class="control-meta">Custom Twitch theme</span>
+            </div>
+            <label class="switch">
+              <input id="themeEnabled" type="checkbox" />
+              <span class="slider"></span>
+            </label>
           </div>
-        </div>
-      </section>
+
+          <div class="control-stack">
+            <label class="control-copy" for="theme">
+              <span class="control-title">Preset</span>
+              <span id="previewTitle" class="control-meta">Twitch Default</span>
+            </label>
+            <select id="theme" class="select">
+              <option value="default">Twitch Default</option>
+              <option value="midnight">Midnight Blue</option>
+              <option value="slate">Slate Glass</option>
+              <option value="cyber">Cyber Neon</option>
+              <option value="ember">Ember Red</option>
+              <option value="forest">Forest Green</option>
+              <option value="arctic">Arctic Light</option>
+              <option value="solar">Solar Gold</option>
+              <option value="rose">Rose Noir</option>
+              <option value="ocean">Ocean Cyan</option>
+              <option value="grape">Grape Pop</option>
+              <option value="matrix">Matrix Lime</option>
+              <option value="candy">Candy Light</option>
+              <option value="oled">OLED Mint</option>
+              <option value="graphite">Graphite Mono</option>
+              <option value="paper">Paper Light</option>
+            </select>
+          </div>
+
+          <div class="control-stack">
+            <label class="control-copy" for="accent">
+              <span class="control-title">Accent</span>
+              <span id="previewDescription" class="control-meta">Native Twitch styling.</span>
+            </label>
+            <div class="inline-controls">
+              <input id="accent" class="color-input" type="color" value="#9146ff" />
+              <output id="accentHex" class="value-chip">#9146FF</output>
+              <button id="presetAccent" class="mini-button" type="button">Use preset</button>
+              <label class="checkbox-chip">
+                <input id="defaultAccent" type="checkbox" />
+                <span>Default accent</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="control-stack">
+            <label class="control-copy" for="fontScale">
+              <span class="control-title">Chat size</span>
+              <span class="control-meta">Message text only</span>
+            </label>
+            <div class="range-row">
+              <input id="fontScale" class="range-input" type="range" min="90" max="115" step="1" value="100" />
+              <span id="fontScaleValue" class="value-chip">100%</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="declutter" hidden>
+          <div class="control-stack">
+            <label class="control-copy">
+              <span class="control-title">Hide on Twitch</span>
+              <span class="control-meta">Remove clutter from Twitch's own UI</span>
+            </label>
+            <label class="declutter-item declutter-select-all">
+              <input id="declutterSelectAll" type="checkbox" />
+              <span>Select all</span>
+            </label>
+            <div id="declutterOptions" class="declutter-grid"></div>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="users" hidden>
+          <div class="control-stack">
+            <label class="control-copy" for="ignoredUserInput">
+              <span class="control-title">Ignored users <span id="ignoredUsersCount" class="count-chip">0/200</span></span>
+              <span class="control-meta">Hide their chat messages</span>
+            </label>
+            <form id="ignoredUserForm" class="inline-controls">
+              <input
+                id="ignoredUserInput"
+                class="text-input"
+                type="text"
+                placeholder="username"
+                maxlength="25"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                aria-label="Username to ignore"
+              />
+              <button id="addIgnoredUser" class="mini-button" type="submit">Add</button>
+            </form>
+            <button id="bulkAddIgnoredToggle" type="button" class="link-button">+ Add multiple at once</button>
+            <div id="bulkAddIgnoredPanel" class="bulk-add-panel" hidden>
+              <textarea
+                id="bulkAddIgnoredInput"
+                class="text-area"
+                rows="3"
+                placeholder="One username per line, or comma-separated"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                aria-label="Usernames to ignore, one per line or comma-separated"
+              ></textarea>
+              <button id="bulkAddIgnoredSubmit" class="mini-button" type="button">Add all</button>
+            </div>
+            <ul id="ignoredUsersList" class="chip-list" aria-live="polite"></ul>
+            <span id="ignoredUsersEmpty" class="control-meta">No ignored users yet.</span>
+          </div>
+
+          <div class="control-stack">
+            <label class="control-copy" for="renamedUserInput">
+              <span class="control-title">Custom names <span id="renamedUsersCount" class="count-chip">0/100</span></span>
+              <span class="control-meta">Show a different name for a streamer or viewer</span>
+            </label>
+            <form id="renamedUserForm" class="inline-controls">
+              <input
+                id="renamedUserInput"
+                class="text-input"
+                type="text"
+                placeholder="username"
+                maxlength="25"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                aria-label="Username to rename"
+              />
+              <input
+                id="renamedNameInput"
+                class="text-input"
+                type="text"
+                placeholder="custom name"
+                maxlength="30"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Custom name to show instead"
+              />
+              <button id="addRenamedUser" class="mini-button" type="submit">Add</button>
+            </form>
+            <button id="bulkAddRenamedToggle" type="button" class="link-button">+ Add multiple at once</button>
+            <div id="bulkAddRenamedPanel" class="bulk-add-panel" hidden>
+              <textarea
+                id="bulkAddRenamedInput"
+                class="text-area"
+                rows="3"
+                placeholder="One per line: username = custom name"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                aria-label="Username and custom name pairs, one per line, separated by = or a comma"
+              ></textarea>
+              <button id="bulkAddRenamedSubmit" class="mini-button" type="button">Add all</button>
+            </div>
+            <ul id="renamedUsersList" class="chip-list" aria-live="polite"></ul>
+            <span id="renamedUsersEmpty" class="control-meta">No custom names yet.</span>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="backup" hidden>
+          <div class="control-stack">
+            <label class="control-copy">
+              <span class="control-title">Backup</span>
+              <span class="control-meta">Save or restore all settings as a file</span>
+            </label>
+            <div class="inline-controls">
+              <button id="exportSettings" class="mini-button" type="button">Export settings</button>
+              <button id="importSettingsButton" class="mini-button" type="button">Import settings</button>
+              <input id="importSettingsFile" type="file" accept="application/json,.json" hidden />
+            </div>
+          </div>
+        </section>
+
+      </div>
     </div>
 
     <footer class="footer">
@@ -138,7 +293,7 @@
             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
           </svg>
         </button>
-        <a class="icon-button" href="https://discord.gg/bke5DEUJzE" target="_blank" rel="noopener noreferrer" title="Join our Discord" aria-label="Join our Discord">
+        <a id="discordLink" class="icon-button" href="https://discord.gg/bke5DEUJzE" target="_blank" rel="noopener noreferrer" title="Join our Discord" aria-label="Join our Discord">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"></path>
           </svg>
@@ -148,6 +303,7 @@
   </main>
 
   <script src="theme-presets.js"></script>
+  <script src="declutter-options.js"></script>
   <script src="settings-schema.js"></script>
   <script src="popup.js"></script>
 </body>

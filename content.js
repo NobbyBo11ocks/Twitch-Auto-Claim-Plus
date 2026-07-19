@@ -13,15 +13,16 @@
   const CLAIM_SESSION_TOTAL_KEY = "twitchToolsClaimSessionTotal";
 
   let settings = { ...DEFAULTS };
+  let ignoredUsersSet = new Set();
+  let renamedUsersMap = new Map();
   let lastClaimAt = 0;
-  let lastClaimAmount = 0;
-  let lastClaimSource = null; // "text" | "points-add-indicator" | null - which method supplied lastClaimAmount, for diagnostics
   let totalClaimedPoints = 0;
   let scanTimer = null;
   let observer = null;
   let observedRoot = null;
   let queuedScan = 0;
   let navPanelOpen = false;
+  let staleClaimButtonWarning = false;
 
   const safeStorageGet = (keys) =>
     new Promise((resolve) => {
@@ -71,18 +72,31 @@
   };
 
   const persistClaimSessionTotal = (amount) => {
-    safeLocalGet({ [CLAIM_SESSION_TOTAL_KEY]: 0 }).then((stored) => {
-      const latestAcrossTabs = Number(stored?.[CLAIM_SESSION_TOTAL_KEY]) || 0;
-      const next = latestAcrossTabs + amount;
-      totalClaimedPoints = next;
-      safeLocalSet({ [CLAIM_SESSION_TOTAL_KEY]: next });
-      renderNavPanel();
-    });
+    try {
+      chrome.runtime.sendMessage({
+        type: "TWITCH_TOOLS_RECORD_CLAIM",
+        claim: { amount }
+      }, (response) => {
+        void chrome.runtime.lastError;
+        if (!response?.ok) return;
+        totalClaimedPoints = Number(response.total) || totalClaimedPoints;
+        renderNavPanel();
+      });
+    } catch {
+      // The visible claim still succeeded even if local accounting is
+      // temporarily unavailable. Never retry the click just to fix history.
+    }
   };
 
   const resetPointsTotal = () => {
     totalClaimedPoints = 0;
-    safeLocalSet({ [CLAIM_SESSION_TOTAL_KEY]: 0 });
+    try {
+      chrome.runtime.sendMessage({ type: "TWITCH_TOOLS_RESET_CLAIMS" }, () => {
+        void chrome.runtime.lastError;
+      });
+    } catch {
+      safeLocalSet({ [CLAIM_SESSION_TOTAL_KEY]: 0 });
+    }
   };
 
   const isVisible = (element) => {
@@ -286,12 +300,52 @@
     check();
   };
 
+  // Health-check for a broken selector/click path: if Twitch ever ships a
+  // markup change that makes candidateButtons() find an element that looks
+  // like a claim button but doesn't actually behave like one (or .click()
+  // stops working against it for any reason), the normal symptom is that the
+  // *same* DOM element keeps showing up as the top candidate on every scan
+  // instead of disappearing once claimed. A real, working claim reliably
+  // removes/replaces the button within one scan cycle, well under this
+  // threshold - CANDIDATE_STALE_THRESHOLD_MS is set several multiples above
+  // CLAIM_COOLDOWN_MS so ordinary claim latency can never trip it by itself.
+  // Tagging the element itself (rather than tracking a selector string or
+  // count) means a *different* bonus button appearing later is never
+  // confused with the same stale one - only continuity of the exact element
+  // counts.
+  const CANDIDATE_SEEN_ATTR = "data-twitch-tools-first-seen";
+  const CANDIDATE_STALE_THRESHOLD_MS = 45000;
+
+  const updateStaleClaimButtonWarning = (button) => {
+    if (!button || !settings.autoClaim) {
+      staleClaimButtonWarning = false;
+      return;
+    }
+
+    const now = Date.now();
+    const seenAt = Number(button.getAttribute(CANDIDATE_SEEN_ATTR));
+    if (!seenAt) {
+      button.setAttribute(CANDIDATE_SEEN_ATTR, String(now));
+      staleClaimButtonWarning = false;
+      return;
+    }
+
+    staleClaimButtonWarning = now - seenAt > CANDIDATE_STALE_THRESHOLD_MS;
+  };
+
   const claimBonus = () => {
-    if (!settings.autoClaim) return;
-    if (isDashboardHost()) return;
+    if (!settings.autoClaim) {
+      staleClaimButtonWarning = false;
+      return;
+    }
+    if (isDashboardHost()) {
+      staleClaimButtonWarning = false;
+      return;
+    }
     if (Date.now() - lastClaimAt < CLAIM_COOLDOWN_MS) return;
 
     const button = candidateButtons()[0];
+    updateStaleClaimButtonWarning(button);
     if (!button) return;
 
     lastClaimAt = Date.now();
@@ -305,8 +359,6 @@
     button.click();
 
     if (textAmount > 0) {
-      lastClaimAmount = textAmount;
-      lastClaimSource = "text";
       totalClaimedPoints += textAmount;
       renderNavPanel();
       persistClaimSessionTotal(textAmount);
@@ -315,8 +367,6 @@
 
     watchForPointsAdd(previousPointsAddText, (amount) => {
       if (amount === null) return; // Nothing usable found - leave the total untouched rather than guess.
-      lastClaimAmount = amount;
-      lastClaimSource = "points-add-indicator";
       totalClaimedPoints += amount;
       renderNavPanel();
       persistClaimSessionTotal(amount);
@@ -358,6 +408,728 @@
 
   const getObserverRoot = () => document.body || document.documentElement || null;
 
+  // Same row-level selector chatTuningCss already relies on for font scaling
+  // (confirmed against a real capture from live Twitch, and independently
+  // confirmed still current by BetterTTV's own open-source chat module,
+  // which targets the same .chat-line__message class as of its current
+  // master branch).
+  //
+  // .seventv-message is a second, unrelated row shape: when the 7TV
+  // extension's own chat rendering is active it replaces Twitch's native
+  // chat-line markup entirely with its own Vue-rendered tree (confirmed
+  // directly from SevenTV/Extension's current source - src/site/twitch.tv/
+  // modules/chat/ChatList.vue renders each message as
+  // `<div class="seventv-message">`, not `.chat-line__message` at all), so a
+  // 7TV user's messages need this selector too or they're invisible to
+  // every query below regardless of what the ignore list contains.
+  const CHAT_LINE_SELECTOR =
+    '[data-a-target="chat-line-message"], [data-test-selector="chat-line-message"], .chat-line__message, .seventv-message';
+  const IGNORED_LINE_ATTR = "data-twitch-tools-ignored";
+
+  // .chat-author__display-name is what's always visible on native Twitch
+  // chat; .chat-author__intl-login only renders (as "(login_name)") when the
+  // display name uses a non-Latin script Twitch can't otherwise match a
+  // typed-in login against - both read from real, currently-shipping Twitch
+  // chat markup (same selectors this file already uses for username
+  // styling, and confirmed still current via BetterTTV's chat module).
+  //
+  // .seventv-chat-user-username is 7TV's equivalent when its own chat
+  // rendering replaces the row above - confirmed directly from
+  // SevenTV/Extension's current source (src/app/chat/UserTag.vue): it holds
+  // one <span> for the display name and, for non-Latin names, a second
+  // <span>(login)</span> - same two-name shape as native Twitch, just
+  // without dedicated per-part classes, so every child span is read and
+  // stripped of any surrounding parens uniformly.
+  const getChatLineAuthorCandidates = (line) => {
+    const names = [];
+
+    const displayEl = line.querySelector('[data-a-target="chat-message-username"], .chat-author__display-name');
+    if (displayEl?.textContent) names.push(displayEl.textContent);
+
+    // .trim() before stripping parens, not after - 7TV's intl-suffix span
+    // (usertag.vue: `<span v-if="user.intl"> ({{ user.username }})</span>`)
+    // renders with a leading space before the "(", so a bare /^\(/ never
+    // matched it and the leading paren survived into the "normalized" name,
+    // which then never validated as a real username (USERNAME_PATTERN has no
+    // room for "("). Confirmed against SevenTV/Extension's current source.
+    const loginEl = line.querySelector(".chat-author__intl-login");
+    if (loginEl?.textContent) names.push(loginEl.textContent.trim().replace(/^\(|\)$/g, ""));
+
+    for (const span of line.querySelectorAll(".seventv-chat-user-username span")) {
+      if (span.textContent) names.push(span.textContent.trim().replace(/^\(|\)$/g, ""));
+    }
+
+    return names.map(normalizeIgnoredUsername).filter(Boolean);
+  };
+
+  // Fast path for ignore matching: once a line's canonical login has been
+  // resolved (see resolveCanonicalLoginForLine below), check it directly
+  // instead of re-reading the DOM. This matters once rename is involved -
+  // applyRenameForLine can overwrite the native display node's text, so
+  // re-deriving "who is this" from live text after that point would read our
+  // own renamed text back instead of the real login. The multi-candidate
+  // fallback below is kept as-is for lines whose login didn't resolve (or
+  // for 7TV's nested-span markup, which is never mutated so reading it live
+  // is always safe) - this can only ever match more than the fast path did,
+  // never less, so it's not a behavior regression from before rename existed.
+  const isIgnoredLine = (line, login) => {
+    if (login && ignoredUsersSet.has(login)) return true;
+    return ignoredUsersSet.size > 0 && getChatLineAuthorCandidates(line).some((name) => ignoredUsersSet.has(name));
+  };
+
+  // Toggles a plain inline style rather than removing the node from the DOM -
+  // Twitch's own chat list is React-managed, and reparenting/removing a node
+  // out from under React risks it throwing on its next reconciliation. Never
+  // touching the node's identity, just its visibility, sidesteps that.
+  const applyIgnoredLineVisibility = (line, ignored) => {
+    if (ignored) {
+      if (!line.hasAttribute(IGNORED_LINE_ATTR)) {
+        line.setAttribute(IGNORED_LINE_ATTR, "true");
+        line.style.display = "none";
+      }
+      return;
+    }
+
+    if (line.hasAttribute(IGNORED_LINE_ATTR)) {
+      line.removeAttribute(IGNORED_LINE_ATTR);
+      line.style.display = "";
+    }
+  };
+
+  // The element actually holding the visible name text on native Twitch chat
+  // (same selector getChatLineAuthorCandidates already uses) - a plain text
+  // leaf with no child elements, safe to overwrite wholesale via textContent.
+  const getChatLineNativeDisplayElement = (line) =>
+    line.querySelector('[data-a-target="chat-message-username"], .chat-author__display-name');
+
+  // Resolves a stable per-line "canonical login" once, then caches it on the
+  // line's own dataset - every later scan of the same line (ignore-list
+  // changes trigger a full-document rescan; see scanChatLinesForUserOverrides)
+  // reads the cache instead of re-deriving from live text, which is what
+  // keeps rename (a text mutation) from corrupting ignore-matching on the
+  // same line afterward. Prefers .chat-author__intl-login when present - that
+  // holds the real ASCII account login, which is what a user actually types
+  // into the ignore/rename settings box, rather than a localized display name
+  // that can't be typed back in to match it.
+  const resolveCanonicalLoginForLine = (line) => {
+    const cached = line.dataset.twitchToolsLogin;
+    if (cached) return cached;
+
+    const loginEl = line.querySelector(".chat-author__intl-login");
+    const displayEl = getChatLineNativeDisplayElement(line);
+    let login;
+
+    if (loginEl || displayEl) {
+      const raw = loginEl?.textContent?.trim().replace(/^\(|\)$/g, "") || displayEl?.textContent || "";
+      login = normalizeIgnoredUsername(raw);
+    } else {
+      // 7TV rendering: getChatLineAuthorCandidates' first entry can be a
+      // concatenated blob like "@Foo" or "Foo (login)" when a mention prefix
+      // or intl suffix span is also present alongside the name (see that
+      // function's own comments on usertag.vue's structure) - neither of
+      // those is a real username, so prefer whichever candidate actually
+      // looks like one (matches USERNAME_PATTERN) before falling back to
+      // just taking the first. This matters for applyRenameForLine's
+      // resolveNameTextNode lookup below, which needs an exact text match.
+      const candidates = getChatLineAuthorCandidates(line);
+      login = candidates.find((name) => USERNAME_PATTERN.test(name)) || candidates[0] || "";
+    }
+
+    if (login) line.dataset.twitchToolsLogin = login;
+    return login;
+  };
+
+  // Shared by chat rename and channel-header rename: finds the one text node
+  // inside `container` whose content actually is `normalizedLogin`, and
+  // remembers the answer (including "not found") by object reference in a
+  // WeakMap, so it's only ever walked once per container rather than
+  // re-searched by content on every scan (which would break the moment the
+  // text is renamed to something that no longer matches).
+  //
+  // The login check on first resolution matters wherever a container can
+  // hold more than one candidate string - confirmed necessary from a live
+  // capture on the channel header, where an <a href="/<login>"> wrapping a
+  // "LIVE" status badge sits right next to the actual <a href="/<login>">
+  // name link: without checking that the text is the login, both looked
+  // identical to "some text inside a same-href link" and both got renamed,
+  // turning the LIVE badge into a second copy of the custom name. The same
+  // ambiguity exists in 7TV's chat markup, which packs an optional "@"
+  // mention prefix and an optional "(login)" intl suffix as sibling text
+  // nodes alongside the actual display name inside one wrapper (see
+  // usertag.vue's structure) - this is what tells them apart safely.
+  const resolvedNameTextNodes = new WeakMap();
+
+  const resolveNameTextNode = (container, normalizedLogin) => {
+    if (resolvedNameTextNodes.has(container)) return resolvedNameTextNodes.get(container);
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let node;
+    let match = null;
+    while ((node = walker.nextNode())) {
+      const trimmed = node.textContent.trim();
+      if (trimmed && normalizeIgnoredUsername(trimmed) === normalizedLogin) {
+        match = node;
+        break;
+      }
+    }
+
+    resolvedNameTextNodes.set(container, match);
+    return match;
+  };
+
+  // Caches each text node's pre-rename content the first time it's touched
+  // (by object reference, not by re-reading the DOM) so a later removal of
+  // the custom name can restore the real one instead of losing it.
+  const originalTextByNode = new WeakMap();
+
+  const applyNameToTextNode = (textNode, targetText) => {
+    if (!textNode) return false;
+
+    if (!originalTextByNode.has(textNode)) {
+      originalTextByNode.set(textNode, textNode.textContent);
+    }
+
+    const text = targetText || originalTextByNode.get(textNode);
+    if (text && textNode.textContent !== text) textNode.textContent = text;
+    return true;
+  };
+
+  // Native Twitch chat's display element is a single-purpose leaf (nothing
+  // else ever shares it), so no login-matching ambiguity exists there - the
+  // first non-empty text node inside it is always the name, including for
+  // non-Latin display names where it won't textually equal the login at all.
+  const findFirstNonEmptyTextNode = (root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.textContent.trim()) return node;
+    }
+    return null;
+  };
+
+  // Covers both native Twitch chat and 7TV's own chat rendering (see
+  // getChatLineNativeDisplayElement and the .seventv-chat-user-username
+  // fallback below) - 7TV replaces Twitch's native chat-line markup
+  // entirely when active, confirmed directly from SevenTV/Extension's
+  // current source (src/app/chat/UserTag.vue), so relying on the native
+  // selector alone would silently do nothing for anyone with 7TV installed.
+  const applyRenameForLine = (line, login) => {
+    if (!login) return;
+    const customName = renamedUsersMap.get(login);
+
+    const nativeDisplayEl = getChatLineNativeDisplayElement(line);
+    if (nativeDisplayEl) {
+      applyNameToTextNode(findFirstNonEmptyTextNode(nativeDisplayEl), customName);
+      return;
+    }
+
+    const sevenTvNameEl = line.querySelector(".seventv-chat-user-username");
+    if (sevenTvNameEl) {
+      applyNameToTextNode(resolveNameTextNode(sevenTvNameEl, login), customName);
+    }
+  };
+
+  // applyRenameForLine above only ever touches the author name at the start
+  // of a line - it never looks at the message *body*, so an @mention of a
+  // renamed user appearing inside someone's message text (including the
+  // sender's own message, right after rewriteChatInputMentions below swaps
+  // their typed custom name for the real login before sending) still showed
+  // the real login once rendered, not the custom name. This is the mirror
+  // image of that send-time rewrite: real login -> custom name, applied only
+  // for display, on the message body specifically. Selectors reused from
+  // chatTuningCss below (chat-message-text/chat-line-message-body), already
+  // relied on elsewhere in this file for the same message-body region.
+  //
+  // .seventv-chat-message-body is 7TV's equivalent when its own chat
+  // rendering is active - confirmed directly from SevenTV/Extension's
+  // current source (src/app/chat/UserMessage.vue: the message body is a
+  // `<span class="seventv-chat-message-body">`, a sibling of UserTag rather
+  // than nested inside it). Without this, a 7TV user's message text was never
+  // matched here at all - only the native-Twitch selectors were - so an
+  // @mention of a renamed user inside a 7TV-rendered message silently kept
+  // showing the real login instead of the custom name, the exact gap
+  // getChatLineAuthorCandidates/applyRenameForLine already closed for the
+  // author name itself.
+  const CHAT_MESSAGE_BODY_SELECTOR =
+    '[data-a-target="chat-message-text"], [data-test-selector="chat-message-text"], [data-a-target="chat-line-message-body"], [data-test-selector="chat-line-message-body"], .seventv-chat-message-body';
+
+  // Caches each message-body text node's original content the first time
+  // it's seen (same idea as originalTextByNode, kept separate since a
+  // message body can contain several independently-matched mentions per
+  // node, not just one whole-node name).
+  const originalMessageTextByNode = new WeakMap();
+
+  // No filtering by whether the custom name contains whitespace here (unlike
+  // buildMentionRewritePairs for the input box) - a real login can never
+  // contain a space, so matching "@reallogin" is always unambiguous
+  // regardless of what the display-only replacement text looks like.
+  const buildDisplayMentionPairs = () =>
+    [...renamedUsersMap.entries()].sort((a, b) => b[0].length - a[0].length);
+
+  // This TreeWalks every text node of a chat line's entire message body -
+  // meaningfully more expensive than the author-name-only work elsewhere in
+  // this file - and runs once per new chat message via the mutation observer
+  // below, so it's worth skipping outright on the common install that has
+  // never configured a custom name at all. Gating on renamedUsersMap.size
+  // alone would be wrong though: if a line's message body was previously
+  // rewritten (someone's only remaining custom name just got removed),
+  // skipping here would leave that body stuck showing the custom name
+  // forever instead of reverting to the real login. A per-line dataset flag
+  // (set only when a rewrite actually took effect on this line, cleared once
+  // its own revert pass completes) distinguishes "never touched, nothing to
+  // do" from "was touched, still needs one more pass" - same idea as
+  // channelHeaderRenameEverApplied/sideNavRenameEverApplied above, just
+  // scoped per line instead of per page.
+  // Same marker-attribute idiom as IGNORED_LINE_ATTR above (set/checked/
+  // cleared via setAttribute/hasAttribute/removeAttribute), not the
+  // dataset-caching idiom resolveCanonicalLoginForLine uses - this one is a
+  // plain boolean flag, not a cached value.
+  const MENTION_APPLIED_ATTR = "data-twitch-tools-mention-applied";
+
+  const applyMentionRenamesForLine = (line) => {
+    if (renamedUsersMap.size === 0 && !line.hasAttribute(MENTION_APPLIED_ATTR)) return;
+
+    const pairs = buildDisplayMentionPairs();
+    let appliedAny = false;
+
+    for (const body of line.querySelectorAll(CHAT_MESSAGE_BODY_SELECTOR)) {
+      const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (!originalMessageTextByNode.has(node)) {
+          originalMessageTextByNode.set(node, node.textContent);
+        }
+
+        const original = originalMessageTextByNode.get(node);
+        if (!original.includes("@")) continue;
+
+        let text = original;
+        for (const [login, customName] of pairs) {
+          const pattern = new RegExp(`(^|\\s)@${escapeRegExp(login)}(?=$|[^A-Za-z0-9_])`, "gi");
+          text = text.replace(pattern, (_match, prefix) => `${prefix}@${customName}`);
+        }
+
+        if (text !== original) appliedAny = true;
+        if (node.textContent !== text) node.textContent = text;
+      }
+    }
+
+    if (appliedAny) line.setAttribute(MENTION_APPLIED_ATTR, "true");
+    else line.removeAttribute(MENTION_APPLIED_ATTR);
+  };
+
+  // Anchor for the nickname pencil icon - the whole clickable name element,
+  // present in both native Twitch chat and 7TV's rendering. Only ever
+  // appended next to as a new sibling, never mutating this element itself.
+  const getChatLineAuthorAnchor = (line) =>
+    line.querySelector(
+      '[data-a-target="chat-message-username"], .chat-author__display-name, .seventv-chat-user-username'
+    );
+
+  const NICKNAME_BUTTON_CLASS = "twitch-tools-nickname-btn";
+
+  const createPencilIcon = () => {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    const svgAttrs = {
+      width: "10",
+      height: "10",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "2",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "aria-hidden": "true"
+    };
+    for (const [key, value] of Object.entries(svgAttrs)) svg.setAttribute(key, value);
+
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", "M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z");
+    svg.appendChild(path);
+    return svg;
+  };
+
+  // Opens a plain native prompt() rather than a custom popover - this mirrors
+  // BetterTTV's own long-shipped nicknames feature (chat_nicknames /
+  // chat_moderator_cards modules), which uses the same prompt()-based flow
+  // triggered from a pencil icon next to the chat username. Settings are
+  // written straight to chrome.storage.sync so the popup's "Custom names"
+  // list (settings-schema.js normalizeRenamedUsers) and this in-chat shortcut
+  // always agree on the same underlying data.
+  const promptForNickname = (login) => {
+    const current = renamedUsersMap.get(login) || "";
+    const input = window.prompt(`Custom display name for ${login} (leave blank to remove):`, current);
+    if (input === null) return;
+
+    const trimmed = normalizeCustomName(input);
+    const nextRenamed = { ...settings.renamedUsers };
+    if (trimmed) {
+      nextRenamed[login] = trimmed;
+    } else {
+      delete nextRenamed[login];
+    }
+
+    const nextSettings = normalizeSettings({ ...settings, renamedUsers: nextRenamed });
+    safeStorageSet(nextSettings);
+    applyRuntimeState(nextSettings);
+  };
+
+  const ensureNicknameButton = (line, login) => {
+    if (!login) return;
+    const anchor = getChatLineAuthorAnchor(line);
+    if (!anchor || !anchor.parentElement) return;
+    if (anchor.nextElementSibling?.classList?.contains(NICKNAME_BUTTON_CLASS)) return;
+
+    // Chat can render before ensureNavButton() has had a chance to run (it
+    // depends on Twitch's top-nav ellipsis button existing first), so this
+    // can't rely on that call path alone to have injected the stylesheet
+    // defining this button's appearance - do it here too (idempotent, see
+    // the guard at the top of injectNavStyle).
+    injectNavStyle();
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = NICKNAME_BUTTON_CLASS;
+    button.title = "Set a custom display name";
+    button.setAttribute("aria-label", `Set a custom display name for ${login}`);
+    button.dataset.login = login;
+    button.appendChild(createPencilIcon());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      promptForNickname(login);
+    });
+
+    anchor.parentElement.insertBefore(button, anchor.nextSibling);
+  };
+
+  // root defaults to the whole document (used after the ignore/rename lists
+  // themselves change, so previously-hidden lines that no longer match get
+  // revealed again, and renamed/reverted lines pick up the change) but is
+  // scoped to just-added nodes from the mutation observer's hot path below,
+  // so ordinary chat traffic doesn't pay for a full-document query on every
+  // message.
+  // This whole feature set is cosmetic - it must never be able to take down
+  // auto-claim (the extension's core job) just because one chat row has an
+  // unexpected shape on some Twitch UI variant or third-party chat extension.
+  // Every line is handled independently (one bad row can't abort the rest of
+  // the batch) and the whole scan is called from its call sites wrapped so a
+  // failure here can't propagate up into applyRuntimeState and block
+  // claimBonus() from ever running.
+  const scanChatLinesForUserOverrides = (root) => {
+    const scope = root || document;
+    const lines = scope.matches?.(CHAT_LINE_SELECTOR)
+      ? [scope, ...scope.querySelectorAll(CHAT_LINE_SELECTOR)]
+      : Array.from(scope.querySelectorAll?.(CHAT_LINE_SELECTOR) || []);
+    for (const line of lines) {
+      try {
+        const login = resolveCanonicalLoginForLine(line);
+        applyIgnoredLineVisibility(line, isIgnoredLine(line, login));
+        applyRenameForLine(line, login);
+        applyMentionRenamesForLine(line);
+        ensureNicknameButton(line, login);
+      } catch (error) {
+        console.error("Twitch Auto Claim Plus: failed to evaluate a chat line for ignore/rename", error);
+      }
+    }
+  };
+
+  const safeScanChatLinesForUserOverrides = (root) => {
+    try {
+      scanChatLinesForUserOverrides(root);
+    } catch (error) {
+      console.error("Twitch Auto Claim Plus: ignore/rename chat scan failed", error);
+    }
+  };
+
+  // The broadcaster's name in their own channel header/title area has no
+  // stable class-based hook - unlike chat, which stays on documented
+  // data-a-target/BEM classes (see getChatLineAuthorCandidates above),
+  // Twitch's channel header uses hashed styled-components classes that
+  // change on every frontend deploy. Confirmed via FrankerFaceZ's own
+  // current source (src/sites/twitch-twilight/modules/channel.jsx): even
+  // FFZ, a much larger and longer-running project, has to walk React fiber
+  // internals to reliably read the stream title rather than use a plain CSS
+  // selector, because no such stable selector exists for that text.
+  //
+  // Rather than that fragile React-internals approach, this keys off the
+  // broadcaster's own profile link instead: Twitch always renders the name
+  // as an <a href="/<login>"> somewhere in the page chrome (it has to, for
+  // navigation to work), and that href is derived straight from the same
+  // channel data as the display name - far more stable than any hashed class
+  // name. Several tight scopes are tried first, in order:
+  //   - [data-a-target="channel-header"] and #live-channel-stream-information
+  //     (FFZ's own confirmed hook for this info bar)
+  //   - .metadata-layout__support - a real, human-authored BEM class (not one
+  //     of Twitch's hashed styled-components classes like "Layout-sc-...")
+  //     confirmed present directly from the user's own DevTools capture on a
+  //     live channel page, one ancestor level above the name link
+  // If Twitch's markup matches none of those (page layout varies, or shifts
+  // over time), this falls back to scanning the whole page rather than
+  // silently doing nothing - excluded from that fallback is the chat
+  // scroller, which already has its own rename handling with different
+  // matching rules (e.g. intl-login preference) in
+  // scanChatLinesForUserOverrides, so the two can't fight over the same node.
+  // Note the whole-document fallback is materially more expensive per scan
+  // than a tight container match - it's what was actually engaging during
+  // testing (confirmed by the fact a same-href "LIVE" status badge got
+  // renamed too, which required a container broad enough to hold both that
+  // badge and the real name link), which is exactly what the
+  // .metadata-layout__support entry above is meant to head off going
+  // forward.
+  const CHANNEL_HEADER_CONTAINER_SELECTORS = [
+    '[data-a-target="channel-header"]',
+    "#live-channel-stream-information",
+    ".metadata-layout__support"
+  ];
+
+  // Tracks whether the current channel page has ever had a rename applied,
+  // so the (more expensive) whole-document fallback scan only ever runs
+  // while there's actually something to do for the channel being viewed -
+  // either applying a configured custom name, or reverting one that was just
+  // removed - rather than on every mutation/interval tick for every visitor
+  // who hasn't configured this feature at all.
+  let lastChannelHeaderLogin = "";
+  let channelHeaderRenameEverApplied = false;
+
+  const applyChannelHeaderRename = () => {
+    const rawLogin = (location.pathname.split("/")[1] || "").split(/[?#]/)[0];
+    if (!rawLogin) return;
+
+    if (rawLogin !== lastChannelHeaderLogin) {
+      lastChannelHeaderLogin = rawLogin;
+      channelHeaderRenameEverApplied = false;
+    }
+
+    const normalizedLogin = normalizeIgnoredUsername(rawLogin);
+    const customName = renamedUsersMap.get(normalizedLogin);
+    if (!customName && !channelHeaderRenameEverApplied) return;
+
+    let containers = CHANNEL_HEADER_CONTAINER_SELECTORS
+      .map((selector) => document.querySelector(selector))
+      .filter(Boolean);
+    if (!containers.length) containers = [document.body];
+
+    const chatScroller = document.querySelector('[data-a-target="chat-scroller"]');
+    const loginLower = rawLogin.toLowerCase();
+    let appliedAny = false;
+
+    for (const container of containers) {
+      for (const link of container.querySelectorAll("a[href]")) {
+        if (chatScroller && chatScroller.contains(link)) continue;
+
+        const href = link.getAttribute("href") || "";
+        const path = href.replace(/^https?:\/\/(www\.)?twitch\.tv/i, "").split(/[?#]/)[0];
+        if (path.toLowerCase() !== `/${loginLower}`) continue;
+
+        if (applyNameToTextNode(resolveNameTextNode(link, normalizedLogin), customName)) appliedAny = true;
+      }
+    }
+
+    if (customName && appliedAny) {
+      channelHeaderRenameEverApplied = true;
+    } else if (!customName) {
+      // The revert pass this call just ran (we only got here because the
+      // flag was true) is done - clear it so future calls go back to the
+      // cheap early-return above instead of re-scanning forever for the
+      // rest of this tab's session just because the feature was used once.
+      channelHeaderRenameEverApplied = false;
+    }
+  };
+
+  const safeApplyChannelHeaderRename = () => {
+    try {
+      applyChannelHeaderRename();
+    } catch (error) {
+      console.error("Twitch Auto Claim Plus: channel header rename failed", error);
+    }
+  };
+
+  // The left rail (Followed/Recommended/Live channels) is a different case
+  // from the channel header above: it lists many *other* channels at once,
+  // not just the one currently being viewed, so this checks every entry's
+  // link against the whole renamedUsersMap instead of a single expected
+  // login. [data-a-target="side-nav-bar"] is already relied on elsewhere in
+  // this file (positionNavPanel, to keep the nav panel clear of this same
+  // rail), so it's a selector this codebase already trusts, not a fresh
+  // guess.
+  const SIDE_NAV_SELECTOR = '[data-a-target="side-nav-bar"]';
+  const SIDE_NAV_LINK_LOGIN_PATTERN = /^\/([a-z0-9_]{4,25})\/?$/i;
+
+  // Same "has this ever actually applied a rename" tracking as
+  // channelHeaderRenameEverApplied above, for the same reason: without it,
+  // removing someone's *last* remaining custom name would make
+  // renamedUsersMap.size drop to 0, which would hit the early-return below
+  // and skip the scan entirely - leaving that sidebar entry stuck showing
+  // the old custom name forever instead of reverting to their real name.
+  let sideNavRenameEverApplied = false;
+
+  const applySideNavRenames = () => {
+    if (renamedUsersMap.size === 0 && !sideNavRenameEverApplied) return;
+
+    const sideNav = document.querySelector(SIDE_NAV_SELECTOR);
+    if (!sideNav) return;
+
+    for (const link of sideNav.querySelectorAll("a[href]")) {
+      const href = link.getAttribute("href") || "";
+      const path = href.replace(/^https?:\/\/(www\.)?twitch\.tv/i, "").split(/[?#]/)[0];
+      const match = SIDE_NAV_LINK_LOGIN_PATTERN.exec(path);
+      if (!match) continue;
+
+      const normalizedLogin = normalizeIgnoredUsername(match[1]);
+      const customName = renamedUsersMap.get(normalizedLogin);
+      if (applyNameToTextNode(resolveNameTextNode(link, normalizedLogin), customName) && customName) {
+        sideNavRenameEverApplied = true;
+      }
+    }
+
+    // The revert pass just ran across every entry (we only got here because
+    // the flag was true with no custom names left) - clear it so future
+    // calls go back to the cheap early-return above instead of re-scanning
+    // the whole rail forever for the rest of this tab's session just
+    // because the feature was used once.
+    if (renamedUsersMap.size === 0) sideNavRenameEverApplied = false;
+  };
+
+  const safeApplySideNavRenames = () => {
+    try {
+      applySideNavRenames();
+    } catch (error) {
+      console.error("Twitch Auto Claim Plus: side nav rename failed", error);
+    }
+  };
+
+  // Lets a message actually @-mention someone using their custom name -
+  // typing "@FrenchGuy" rewrites to "@karmahds" right before the message
+  // sends, so Twitch's own mention highlighting/notification (which only
+  // recognizes real logins) still works correctly for the real account.
+  //
+  // BetterTTV's own equivalent (src/modules/send_message/index.js, confirmed
+  // directly from their current source) does this by walking React fiber
+  // internals to find Twitch's chat controller component and monkey-patching
+  // its sendMessage method directly - deliberately not used here. That
+  // technique breaks the moment Twitch restructures that part of the React
+  // tree, and unlike every other cosmetic fix in this file, a failure there
+  // risks the ability to send *any* chat message at all, not just a display
+  // glitch. This instead uses a plain, well-established browser-extension
+  // pattern for intercepting a page's own input handling: a capture-phase
+  // listener on the document catches the Enter keydown (or a click anywhere
+  // in the send form, covering an on-screen send button) before it reaches
+  // Twitch's own React event handling, rewrites the input's text nodes in
+  // place (never touching non-text children like an inline emote image the
+  // picker may have inserted), and fires a real InputEvent so Twitch's
+  // controlled input re-syncs its own state to the rewritten text before
+  // that same keydown/click continues on to Twitch's send logic.
+  const CHAT_SEND_FORM_SELECTOR = 'form[data-a-target="chat-send-message-form"]';
+  const CHAT_INPUT_CONTAINER_SELECTOR = '[data-a-target="chat-input"], [data-test-selector="chat-input"]';
+
+  const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // Multi-word custom names ("French Guy") can never be typed as a single
+  // "@word" mention token anyway - Twitch's own mentions don't span spaces
+  // either - so those are simply not offered for rewriting here rather than
+  // silently doing a partial, broken match. Sorted longest-first so a short
+  // custom name that happens to be a prefix of a longer one ("Guy" vs
+  // "GuyTwo") can't shadow the longer, more specific match.
+  const buildMentionRewritePairs = () =>
+    [...renamedUsersMap.entries()]
+      .filter(([, customName]) => !/\s/.test(customName))
+      .sort((a, b) => b[1].length - a[1].length);
+
+  const rewriteChatInputMentions = (editable) => {
+    const pairs = buildMentionRewritePairs();
+    if (!pairs.length) return;
+
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    let node;
+    let changed = false;
+    while ((node = walker.nextNode())) {
+      const original = node.textContent;
+      if (!original || !original.includes("@")) continue;
+
+      let text = original;
+      for (const [login, customName] of pairs) {
+        // Requires the "@" to actually start a mention - either at the very
+        // start of this text node or right after whitespace - not just
+        // "@" anywhere. Without the leading check, "email@FrenchGuy.com"
+        // would get rewritten too, since only what follows the name was
+        // being checked before.
+        const pattern = new RegExp(`(^|\\s)@${escapeRegExp(customName)}(?=$|[^A-Za-z0-9_])`, "gi");
+        text = text.replace(pattern, (_match, prefix) => `${prefix}@${login}`);
+      }
+
+      if (text !== original) {
+        node.textContent = text;
+        changed = true;
+      }
+    }
+
+    if (!changed) return;
+
+    // Contenteditable content doesn't keep a sensible caret position after a
+    // text node is overwritten out from under it - park it at the end
+    // (harmless either way here, since Enter/send immediately follows and
+    // clears the box, but keeps things sane if the rewrite ever fires
+    // without an immediate send).
+    const range = document.createRange();
+    range.selectNodeContents(editable);
+    range.collapse(false);
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    editable.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText" }));
+  };
+
+  const safeRewriteChatInputMentions = (editable) => {
+    try {
+      rewriteChatInputMentions(editable);
+    } catch (error) {
+      console.error("Twitch Auto Claim Plus: rewriting custom-name mentions before send failed", error);
+    }
+  };
+
+  const handleChatSendKeydown = (event) => {
+    if (renamedUsersMap.size === 0) return;
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.getAttribute("contenteditable") !== "true") return;
+    if (!target.closest(CHAT_SEND_FORM_SELECTOR) && !target.closest(CHAT_INPUT_CONTAINER_SELECTOR)) return;
+
+    safeRewriteChatInputMentions(target);
+  };
+
+  // Click handling is scoped to "anywhere inside the send form" rather than
+  // a specific send-button selector I have no way to verify without a live
+  // capture (the same trap that caused the channel-header selector to miss
+  // on the first two attempts) - this is safe to run broadly because the
+  // rewrite is idempotent: once "@customName" has already become
+  // "@reallogin", re-running it on an unrelated click inside the same form
+  // (e.g. opening the emote picker) finds nothing left to change and no-ops.
+  const handleChatSendClick = (event) => {
+    if (renamedUsersMap.size === 0) return;
+
+    const form = event.target instanceof HTMLElement ? event.target.closest(CHAT_SEND_FORM_SELECTOR) : null;
+    if (!form) return;
+
+    const editable = form.querySelector('[contenteditable="true"]');
+    if (editable) safeRewriteChatInputMentions(editable);
+  };
+
+  let chatSendInterceptInstalled = false;
+  const ensureChatSendIntercept = () => {
+    if (chatSendInterceptInstalled) return;
+    chatSendInterceptInstalled = true;
+    // Capture phase, on document - fires before the event reaches Twitch's
+    // own listeners (attached on/under the input itself), regardless of
+    // whether those are plain DOM listeners or React's synthetic ones.
+    document.addEventListener("keydown", handleChatSendKeydown, true);
+    document.addEventListener("click", handleChatSendClick, true);
+  };
+
   const ensureScanObserver = () => {
     const root = getObserverRoot();
     if (!root) return false;
@@ -366,8 +1138,27 @@
     if (observer) observer.disconnect();
     observedRoot = root;
     observer = new MutationObserver((mutations) => {
-      if (mutationMightContainClaimButton(mutations)) queueClaimScan();
+      // mutationMightContainClaimButton itself is a real DOM scan (not just a
+      // flag check) - skip it entirely when auto-claim is off rather than
+      // running it on every mutation just to have queueClaimScan's own guard
+      // throw the result away. On a busy chat page mutations fire on nearly
+      // every message, so this is the difference between "auto-claim off"
+      // meaning no scanning at all versus scanning at full rate for nothing.
+      if (settings.autoClaim && mutationMightContainClaimButton(mutations)) queueClaimScan();
       ensureNavButton();
+      safeApplyChannelHeaderRename();
+      safeApplySideNavRenames();
+
+      // Unconditional (not gated behind having any ignored/renamed users
+      // configured) - the nickname pencil icon needs to appear on every chat
+      // line even when nobody's been renamed yet, since that icon is how a
+      // first custom name gets set in the first place.
+      for (const mutation of mutations) {
+        if (mutation.type !== "childList") continue;
+        for (const node of mutation.addedNodes) {
+          if (node instanceof HTMLElement) safeScanChatLinesForUserOverrides(node);
+        }
+      }
     });
     observer.observe(root, {
       childList: true,
@@ -728,6 +1519,9 @@ ${tuningCss}`;
         font-weight: 700;
         font-size: 13px;
       }
+      #${NAV_PANEL_ID} .ttnp-header-settings {
+        margin-left: auto;
+      }
       #${NAV_PANEL_ID} .ttnp-row {
         display: flex;
         align-items: center;
@@ -814,6 +1608,29 @@ ${tuningCss}`;
         border: 1px solid var(--twitch-tools-panel-border, rgba(255, 255, 255, 0.12));
         background-color: var(--twitch-tools-panel-input-bg, #17171b);
       }
+
+      .${NICKNAME_BUTTON_CLASS} {
+        all: unset;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        height: 14px;
+        margin-left: 4px;
+        vertical-align: middle;
+        cursor: pointer;
+        color: rgba(255, 255, 255, 0.35);
+        opacity: 0;
+        transition: opacity 120ms ease, color 120ms ease;
+      }
+      .chat-line__message:hover .${NICKNAME_BUTTON_CLASS},
+      .seventv-message:hover .${NICKNAME_BUTTON_CLASS},
+      .${NICKNAME_BUTTON_CLASS}:focus-visible {
+        opacity: 1;
+      }
+      .${NICKNAME_BUTTON_CLASS}:hover {
+        color: var(--twitch-tools-accent, #9146ff);
+      }
     `;
     document.documentElement.appendChild(style);
   };
@@ -862,12 +1679,54 @@ ${tuningCss}`;
     return svg;
   };
 
+  // Same gear glyph as popup.html's own settings button, kept identical so
+  // the two surfaces read as one visual system rather than two different
+  // icon styles for the same action.
+  const createGearIcon = () => {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    const svgAttrs = {
+      width: "12",
+      height: "12",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "2",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "aria-hidden": "true"
+    };
+    for (const [key, value] of Object.entries(svgAttrs)) svg.setAttribute(key, value);
+
+    const circle = document.createElementNS(SVG_NS, "circle");
+    for (const [key, value] of Object.entries({ cx: "12", cy: "12", r: "3" })) circle.setAttribute(key, value);
+    svg.appendChild(circle);
+
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute(
+      "d",
+      "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82A1.65 1.65 0 0 0 3 13.09H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+    );
+    svg.appendChild(path);
+    return svg;
+  };
+
   const buildNavPanelElement = () => {
     const arrow = createEl("div", { className: "ttnp-arrow" });
 
+    const openSettingsButton = createEl("button", {
+      className: "ttnp-icon-btn ttnp-header-settings",
+      attrs: {
+        type: "button",
+        "data-action": "open-settings",
+        title: "Open settings",
+        "aria-label": "Open settings"
+      }
+    }, [createGearIcon()]);
+
     const header = createEl("div", { className: "ttnp-header" }, [
       createEl("img", { className: "ttnp-logo", attrs: { alt: "", src: chrome.runtime.getURL("icons/icon32.png") } }),
-      createEl("span", { className: "ttnp-title", text: "Twitch Auto Claim Plus" })
+      createEl("span", { className: "ttnp-title", text: "Twitch Auto Claim Plus" }),
+      openSettingsButton
     ]);
 
     const pointsLabel = createEl("span", { className: "ttnp-label", text: "Points claimed" });
@@ -998,12 +1857,27 @@ ${tuningCss}`;
 
     panel.addEventListener("click", (event) => {
       const target = event.target.closest("[data-action]");
-      if (!target || target.dataset.action !== "reset-points") return;
+      if (!target) return;
 
-      const confirmed = window.confirm("Reset the all-time points counter to 0? This can't be undone.");
-      if (!confirmed) return;
-      resetPointsTotal();
-      renderNavPanel();
+      if (target.dataset.action === "reset-points") {
+        const confirmed = window.confirm("Reset the all-time points counter to 0? This can't be undone.");
+        if (!confirmed) return;
+        resetPointsTotal();
+        renderNavPanel();
+        return;
+      }
+
+      if (target.dataset.action === "open-settings") {
+        // No response handling needed beyond swallowing chrome.runtime.lastError
+        // - this is a convenience shortcut, not core functionality, and
+        // background.js already logs/handles its own failure to open the
+        // window. Closing the panel first so it isn't left open behind the
+        // new settings window.
+        closeNavPanel();
+        chrome.runtime.sendMessage({ type: "TWITCH_TOOLS_OPEN_SETTINGS" }, () => {
+          void chrome.runtime.lastError;
+        });
+      }
     });
 
     panel.addEventListener("change", (event) => {
@@ -1021,12 +1895,12 @@ ${tuningCss}`;
         const selectedTheme = Object.prototype.hasOwnProperty.call(THEME_PRESETS, target.value)
           ? target.value
           : DEFAULTS.theme;
-        const nextSettings = normalizeSettings({
-          ...settings,
+        const themeUpdate = {
           theme: selectedTheme,
           themeEnabled: selectedTheme !== "default",
           accent: THEME_PRESETS[selectedTheme]?.accent || DEFAULTS.accent
-        });
+        };
+        const nextSettings = normalizeSettings({ ...settings, ...themeUpdate });
         safeStorageSet(nextSettings);
         applyRuntimeState(nextSettings);
       }
@@ -1097,11 +1971,59 @@ ${tuningCss}`;
     style.textContent = themeCss(settings);
   };
 
+  const DECLUTTER_STYLE_ID = "twitch-tools-declutter-style";
+
+  // Deliberately independent of themeCss/applyTheme above - hiding a UI
+  // element is a site-wide preference that has nothing to do with whether a
+  // colour theme is active, so it gets its own <style> element rather than
+  // being folded into the theme stylesheet (which is fully replaced/emptied
+  // whenever theming is toggled off).
+  const declutterCss = (hiddenElements) => {
+    if (!hiddenElements.length) return "";
+
+    const selectors = hiddenElements
+      .map((id) => DECLUTTER_OPTIONS[id]?.selector)
+      .filter(Boolean);
+    if (!selectors.length) return "";
+
+    return `${selectors.join(",\n")} {\n  display: none !important;\n}`;
+  };
+
+  const applyDeclutter = () => {
+    let style = document.getElementById(DECLUTTER_STYLE_ID);
+    const css = declutterCss(settings.hiddenElements);
+
+    if (!css) {
+      if (style) style.textContent = "";
+      return;
+    }
+
+    if (!style) {
+      style = document.createElement("style");
+      style.id = DECLUTTER_STYLE_ID;
+      document.documentElement.appendChild(style);
+    }
+    style.textContent = css;
+  };
+
   const applyRuntimeState = (nextSettings, { runClaim = true } = {}) => {
     settings = normalizeSettings(nextSettings);
+    ignoredUsersSet = new Set(settings.ignoredUsers);
+    renamedUsersMap = new Map(Object.entries(settings.renamedUsers));
     applyTheme();
+    applyDeclutter();
     renderNavPanel();
+    // Claiming runs before the ignore/rename scan, and unconditionally (not
+    // gated behind the scan succeeding) - auto-claim is this extension's
+    // core job and must run even if the chat scan below fails outright.
     if (runClaim) claimBonus();
+    // Scoped to the chat scroller (falls back to the whole document before
+    // it exists, e.g. on a non-chat page) rather than skipped outright, so
+    // messages already on screen get hidden/revealed/renamed immediately when
+    // the ignore/rename lists themselves change, not just newly-arriving ones.
+    safeScanChatLinesForUserOverrides(document.querySelector('[data-a-target="chat-scroller"]') || document);
+    safeApplyChannelHeaderRename();
+    safeApplySideNavRenames();
   };
 
   const loadSettings = async () => {
@@ -1123,10 +2045,9 @@ ${tuningCss}`;
     accent: settings.accent,
     fontScale: settings.fontScale,
     lastClaimAt,
-    lastClaimAmount,
-    lastClaimSource,
     totalClaimedPoints,
-    visibleBonusButtons: isDashboardHost() ? 0 : candidateButtons().length
+    visibleBonusButtons: isDashboardHost() ? 0 : candidateButtons().length,
+    staleClaimButtonWarning
   });
 
   const startScanning = () => {
@@ -1134,9 +2055,12 @@ ${tuningCss}`;
     scanTimer = window.setInterval(() => {
       claimBonus();
       ensureNavButton();
+      safeApplyChannelHeaderRename();
+      safeApplySideNavRenames();
     }, SCAN_INTERVAL_MS);
 
     ensureScanObserver();
+    ensureChatSendIntercept();
     claimBonus();
     ensureNavButton();
   };
@@ -1146,15 +2070,7 @@ ${tuningCss}`;
 
     if (message.type === "TWITCH_TOOLS_UPDATE") {
       const nextSettings = normalizeSettings({ ...settings, ...message.settings });
-      safeStorageSet(nextSettings);
       applyRuntimeState(nextSettings);
-      sendResponse({ ok: true, status: getStatus() });
-      return;
-    }
-
-    if (message.type === "TWITCH_TOOLS_RESET_POINTS") {
-      resetPointsTotal();
-      renderNavPanel();
       sendResponse({ ok: true, status: getStatus() });
       return;
     }
@@ -1194,9 +2110,18 @@ ${tuningCss}`;
     }
   });
 
-  loadSettings().then(() => {
-    startScanning();
-  });
+  // Belt-and-suspenders: startScanning() (which sets up the claim interval,
+  // the mutation observer, and the nav button) must run even if something
+  // unrelated inside loadSettings() throws - auto-claim is the entire point
+  // of this extension and can't be allowed to depend on every downstream
+  // settings-driven feature succeeding first.
+  loadSettings()
+    .catch((error) => {
+      console.error("Twitch Auto Claim Plus: loadSettings failed, starting with defaults", error);
+    })
+    .then(() => {
+      startScanning();
+    });
 
   window.addEventListener("pagehide", () => {
     if (scanTimer) window.clearInterval(scanTimer);

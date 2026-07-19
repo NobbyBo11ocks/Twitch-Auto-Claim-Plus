@@ -17,15 +17,38 @@
     defaultAccent: $("defaultAccent"),
     resetAll: $("resetAll"),
     refreshStatus: $("refreshStatus"),
+    discordLink: $("discordLink"),
+    sidenav: $("sidenav"),
+    panels: $("panels"),
     status: $("status"),
-    statusAutoClaim: $("statusAutoClaim"),
-    statusTheme: $("statusTheme"),
-    statusAccent: $("statusAccent"),
     statusLastClaim: $("statusLastClaim"),
     statusTotalPoints: $("statusTotalPoints"),
+    staleClaimWarning: $("staleClaimWarning"),
     resetPoints: $("resetPoints"),
     previewTitle: $("previewTitle"),
-    previewDescription: $("previewDescription")
+    previewDescription: $("previewDescription"),
+    declutterOptions: $("declutterOptions"),
+    declutterSelectAll: $("declutterSelectAll"),
+    ignoredUserForm: $("ignoredUserForm"),
+    ignoredUserInput: $("ignoredUserInput"),
+    ignoredUsersList: $("ignoredUsersList"),
+    ignoredUsersCount: $("ignoredUsersCount"),
+    bulkAddIgnoredToggle: $("bulkAddIgnoredToggle"),
+    bulkAddIgnoredPanel: $("bulkAddIgnoredPanel"),
+    bulkAddIgnoredInput: $("bulkAddIgnoredInput"),
+    bulkAddIgnoredSubmit: $("bulkAddIgnoredSubmit"),
+    renamedUserForm: $("renamedUserForm"),
+    renamedUserInput: $("renamedUserInput"),
+    renamedNameInput: $("renamedNameInput"),
+    renamedUsersList: $("renamedUsersList"),
+    renamedUsersCount: $("renamedUsersCount"),
+    bulkAddRenamedToggle: $("bulkAddRenamedToggle"),
+    bulkAddRenamedPanel: $("bulkAddRenamedPanel"),
+    bulkAddRenamedInput: $("bulkAddRenamedInput"),
+    bulkAddRenamedSubmit: $("bulkAddRenamedSubmit"),
+    exportSettings: $("exportSettings"),
+    importSettingsButton: $("importSettingsButton"),
+    importSettingsFile: $("importSettingsFile")
   };
 
   const missingControls = Object.entries(controls)
@@ -112,6 +135,89 @@
       (controls.accent.value || "").toLowerCase() === DEFAULTS.accent.toLowerCase();
   };
 
+  // Built once (the option list is fixed, unlike the ignored/renamed-user
+  // chip lists) - later updates only flip .checked via renderDeclutterState,
+  // no need to tear down and rebuild the DOM on every settings change.
+  let declutterGridBuilt = false;
+
+  const buildDeclutterGrid = () => {
+    if (declutterGridBuilt) return;
+    declutterGridBuilt = true;
+
+    for (const [id, option] of Object.entries(DECLUTTER_OPTIONS)) {
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.dataset.id = id;
+
+      const label = document.createElement("label");
+      label.className = "declutter-item";
+      label.title = option.desc;
+      label.append(input, document.createTextNode(option.label));
+
+      controls.declutterOptions.appendChild(label);
+    }
+  };
+
+  const renderDeclutterState = (hiddenElements) => {
+    const hidden = new Set(hiddenElements);
+    for (const input of controls.declutterOptions.querySelectorAll("input[type=\"checkbox\"]")) {
+      input.checked = hidden.has(input.dataset.id);
+    }
+    const total = Object.keys(DECLUTTER_OPTIONS).length;
+    controls.declutterSelectAll.checked = hidden.size === total;
+    controls.declutterSelectAll.indeterminate = hidden.size > 0 && hidden.size < total;
+  };
+
+  const renderIgnoredUsers = (users) => {
+    controls.ignoredUsersList.textContent = "";
+    for (const name of users) {
+      const item = document.createElement("li");
+      item.className = "chip";
+
+      const label = document.createElement("span");
+      label.textContent = name;
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "chip-remove";
+      removeButton.dataset.username = name;
+      removeButton.setAttribute("aria-label", `Stop ignoring ${name}`);
+      removeButton.textContent = "×";
+
+      item.append(label, removeButton);
+      controls.ignoredUsersList.appendChild(item);
+    }
+  };
+
+  const renderRenamedUsers = (renamedUsers) => {
+    controls.renamedUsersList.textContent = "";
+    for (const [name, customName] of Object.entries(renamedUsers)) {
+      const item = document.createElement("li");
+      item.className = "chip";
+
+      const label = document.createElement("span");
+      label.textContent = name;
+
+      const arrow = document.createElement("span");
+      arrow.className = "chip-arrow";
+      arrow.textContent = "→";
+      arrow.setAttribute("aria-hidden", "true");
+
+      const customLabel = document.createElement("span");
+      customLabel.textContent = customName;
+
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "chip-remove";
+      removeButton.dataset.username = name;
+      removeButton.setAttribute("aria-label", `Remove custom name for ${name}`);
+      removeButton.textContent = "×";
+
+      item.append(label, arrow, customLabel, removeButton);
+      controls.renamedUsersList.appendChild(item);
+    }
+  };
+
   const setUi = (settings, { syncState = true } = {}) => {
     const next = normalizeSettings(settings);
 
@@ -129,6 +235,11 @@
     applyPopupPalette(next);
     updateDefaultAccentState();
     updatePreview();
+    renderIgnoredUsers(next.ignoredUsers);
+    renderRenamedUsers(next.renamedUsers);
+    setText(controls.ignoredUsersCount, `${next.ignoredUsers.length}/${MAX_IGNORED_USERS}`);
+    setText(controls.renamedUsersCount, `${Object.keys(next.renamedUsers).length}/${MAX_RENAMED_USERS}`);
+    renderDeclutterState(next.hiddenElements);
   };
 
   const flashStatus = (message) => {
@@ -192,12 +303,10 @@
 
   const buildOfflineStatus = () => ({
     online: false,
-    autoClaim: "—",
-    theme: "—",
-    accent: "—",
     lastClaim: "—",
     lastClaimAt: 0,
-    totalPoints: "—"
+    totalPoints: "—",
+    staleClaimButtonWarning: false
   });
 
   const buildStatusView = (payload, onTwitchTab) => {
@@ -206,29 +315,21 @@
     }
 
     const status = payload.status;
-    const accent = status.accent || controls.accent.value || DEFAULTS.accent;
-    const themeLabel = status.themeEnabled
-      ? (status.themeLabel || THEME_PRESETS[status.theme]?.label || status.theme || "Custom")
-      : "Default";
 
     return {
       online: true,
-      autoClaim: status.autoClaimEnabled ? "On" : "Off",
-      theme: themeLabel,
-      accent: accent.toLowerCase() === DEFAULTS.accent.toLowerCase() ? "Default" : accent.toUpperCase(),
       lastClaim: formatRelativeTime(status.lastClaimAt),
       lastClaimAt: Number(status.lastClaimAt) || 0,
-      totalPoints: formatPoints(status.totalClaimedPoints)
+      totalPoints: formatPoints(status.totalClaimedPoints),
+      staleClaimButtonWarning: Boolean(status.staleClaimButtonWarning)
     };
   };
 
   const renderStatusView = (view) => {
     const renderKey = JSON.stringify({
-      autoClaim: view.autoClaim,
-      theme: view.theme,
-      accent: view.accent,
       lastClaim: view.lastClaim,
-      totalPoints: view.totalPoints
+      totalPoints: view.totalPoints,
+      staleClaimButtonWarning: view.staleClaimButtonWarning
     });
 
     lastKnownStatus = view;
@@ -237,11 +338,9 @@
     }
 
     lastRenderedStatusKey = renderKey;
-    setText(controls.statusAutoClaim, view.autoClaim);
-    setText(controls.statusTheme, view.theme);
-    setText(controls.statusAccent, view.accent);
     setText(controls.statusLastClaim, view.lastClaim);
     setText(controls.statusTotalPoints, view.totalPoints);
+    controls.staleClaimWarning.hidden = !view.staleClaimButtonWarning;
   };
 
   const refreshRelativeTimeOnly = () => {
@@ -257,9 +356,24 @@
     renderStatusView({ ...lastKnownStatus, lastClaim: nextLastClaim });
   };
 
+  // Piggybacks a periodic full status refresh onto the existing 1s
+  // relative-time tick rather than adding a second interval - this is what
+  // lets the stale-claim-button warning (and anything else server-side that
+  // doesn't have its own storage.onChanged signal) surface on its own while
+  // the window is left open, instead of only ever updating on a manual
+  // refresh click.
+  let relativeTimeTickCount = 0;
+  const FULL_STATUS_REFRESH_EVERY_N_TICKS = 20;
+
   const startRelativeTimeUpdates = () => {
     if (!relativeTimeTimer) {
-      relativeTimeTimer = window.setInterval(refreshRelativeTimeOnly, 1000);
+      relativeTimeTimer = window.setInterval(() => {
+        refreshRelativeTimeOnly();
+        relativeTimeTickCount += 1;
+        if (relativeTimeTickCount % FULL_STATUS_REFRESH_EVERY_N_TICKS === 0) {
+          fetchStatus();
+        }
+      }, 1000);
     }
   };
 
@@ -322,7 +436,7 @@
     // content dimensions - see fitFloatingWindowToContent() below, which
     // self-corrects the exact size once the new window has actually rendered.
     const width = FLOATING_WINDOW_WIDTH;
-    const height = 522;
+    const height = 488;
     const { left, top } = computeCenteredPosition(width, height);
 
     try {
@@ -349,15 +463,15 @@
     }
   });
 
-  // popup.css hardcodes html/body to exactly 388px wide (width/min-width/max-width
-  // all 388px) - the content width never actually varies, so there's no need to
+  // popup.css hardcodes html/body to exactly 600px wide (width/min-width/max-width
+  // all 600px) - the content width never actually varies, so there's no need to
   // measure and fit it dynamically. A small buffer above that CSS floor absorbs
   // OS-level DPI-scaling rounding when chrome.windows.update() applies the
   // requested size (very common on Windows at 125%/150% scaling) - without it, a
-  // resize can land a couple of pixels short of 388px and get permanently stuck
+  // resize can land a couple of pixels short of 600px and get permanently stuck
   // there, since this only runs once per window, forcing an unwanted horizontal
   // scrollbar on every theme/content change for the rest of that window's life.
-  const FLOATING_WINDOW_WIDTH = 396;
+  const FLOATING_WINDOW_WIDTH = 608;
 
   // Set only once boot() has confirmed windowType === "popup" - left null in
   // every other case (including the hand-off-failed fallback), so
@@ -384,10 +498,21 @@
       const chromeHeight = Math.max(0, window.outerHeight - window.innerHeight);
       const targetWidth = Math.ceil(rect.width);
       const targetHeight = Math.ceil(rect.height);
+      const totalWidth = targetWidth + chromeWidth;
+      const totalHeight = targetHeight + chromeHeight;
+
+      // Re-centering here (not just resizing) matters now that the sidebar-tab
+      // layout makes the window's height vary a lot by tab (Status is short,
+      // Users can be tall with long chip lists) - anchoring only width/height
+      // to a fixed top-left corner would let the window grow/shrink off-center
+      // or even off-screen as the user switches tabs.
+      const { left, top } = computeCenteredPosition(totalWidth, totalHeight);
 
       await chrome.windows.update(cachedFloatingWindowId, {
-        width: targetWidth + chromeWidth,
-        height: targetHeight + chromeHeight
+        width: totalWidth,
+        height: totalHeight,
+        left,
+        top
       });
 
       // OS-level DPI scaling (125%/150%, common on Windows) can round the
@@ -400,8 +525,12 @@
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const widthShortfall = targetWidth - window.innerWidth;
       if (widthShortfall > 0) {
+        const adjustedWidth = totalWidth + widthShortfall + 2;
+        const adjusted = computeCenteredPosition(adjustedWidth, totalHeight);
         await chrome.windows.update(cachedFloatingWindowId, {
-          width: targetWidth + chromeWidth + widthShortfall + 2
+          width: adjustedWidth,
+          left: adjusted.left,
+          top: adjusted.top
         });
       }
     } catch {
@@ -440,20 +569,20 @@
   };
 
   const resetPointsTotal = async () => {
-    const tab = await getActiveTwitchTab();
-    if (!tab) {
-      flashStatus("Open a Twitch tab first");
-      return;
-    }
-
-    const confirmed = window.confirm("Reset the all-time points counter to 0? This can't be undone.");
+    const confirmed = window.confirm("Reset the points counter to 0? This can't be undone.");
     if (!confirmed) {
       return;
     }
 
-    const response = await sendMessageToTab(tab.id, { type: "TWITCH_TOOLS_RESET_POINTS" });
-    renderStatusView(buildStatusView(response, true));
-    flashStatus("Points counter reset");
+    chrome.runtime.sendMessage({ type: "TWITCH_TOOLS_RESET_CLAIMS" }, async (response) => {
+      clearRuntimeError();
+      if (!response?.ok) {
+        flashStatus("Reset failed");
+        return;
+      }
+      await fetchStatus();
+      flashStatus("Points counter reset");
+    });
   };
 
   const applyToCurrentTab = async (settings) => {
@@ -483,7 +612,19 @@
     saveTimer = window.setTimeout(async () => {
       await cleanupDeprecatedSettings();
       chrome.storage.sync.set(next, async () => {
-        clearRuntimeError();
+        const storageError = chrome.runtime.lastError;
+        if (storageError) {
+          // The UI is updated optimistically before the debounced write. If
+          // sync storage rejects it (quota, policy, or a transient browser
+          // error), restore the last persisted value instead of leaving the
+          // controls showing settings that will disappear on reopen.
+          chrome.storage.sync.get(DEFAULTS, (stored) => {
+            clearRuntimeError();
+            setUi(normalizeSettings(stored));
+            flashStatus("Save failed - settings restored");
+          });
+          return;
+        }
         await applyToCurrentTab(next);
         flashStatus(message);
       });
@@ -531,6 +672,261 @@
     saveSettings(DEFAULTS, "Everything reset");
   };
 
+  const addIgnoredUser = (rawValue) => {
+    const name = normalizeIgnoredUsername(rawValue);
+    if (!name) return;
+
+    if (!USERNAME_PATTERN.test(name)) {
+      flashStatus("Not a valid Twitch username");
+      return;
+    }
+
+    if (currentSettings.ignoredUsers.includes(name)) {
+      controls.ignoredUserInput.value = "";
+      flashStatus(`Already ignoring ${name}`);
+      return;
+    }
+
+    const next = normalizeSettings({ ...currentSettings, ignoredUsers: [...currentSettings.ignoredUsers, name] });
+    // normalizeSettings silently drops entries past MAX_IGNORED_USERS - if the
+    // list didn't grow, that's what happened rather than the add succeeding.
+    if (next.ignoredUsers.length === currentSettings.ignoredUsers.length) {
+      flashStatus("Ignore list is full");
+      return;
+    }
+
+    setUi(next);
+    controls.ignoredUserInput.value = "";
+    controls.ignoredUserInput.focus();
+    saveSettings(next, `Ignoring ${name}`);
+  };
+
+  const removeIgnoredUser = (name) => {
+    const nextList = currentSettings.ignoredUsers.filter((user) => user !== name);
+    if (nextList.length === currentSettings.ignoredUsers.length) return;
+
+    const next = normalizeSettings({ ...currentSettings, ignoredUsers: nextList });
+    setUi(next);
+    saveSettings(next, `Removed ${name}`);
+  };
+
+  // One line or comma-separated entry per username - independent entries, so
+  // either separator (or a mix) works for a pasted list.
+  const parseBulkUsernames = (raw) =>
+    (raw || "")
+      .split(/[\n,]+/)
+      .map((entry) => normalizeIgnoredUsername(entry))
+      .filter(Boolean);
+
+  const addIgnoredUsersBulk = (raw) => {
+    const candidates = parseBulkUsernames(raw);
+    if (!candidates.length) {
+      flashStatus("Nothing to add");
+      return;
+    }
+
+    const existing = new Set(currentSettings.ignoredUsers);
+    const toAdd = [];
+    let invalid = 0;
+    let duplicate = 0;
+
+    for (const name of candidates) {
+      if (!USERNAME_PATTERN.test(name)) {
+        invalid += 1;
+        continue;
+      }
+      if (existing.has(name) || toAdd.includes(name)) {
+        duplicate += 1;
+        continue;
+      }
+      toAdd.push(name);
+    }
+
+    if (!toAdd.length) {
+      flashStatus(invalid && !duplicate ? "No valid usernames found" : "Already ignoring all of those");
+      return;
+    }
+
+    const next = normalizeSettings({ ...currentSettings, ignoredUsers: [...currentSettings.ignoredUsers, ...toAdd] });
+    const added = next.ignoredUsers.length - currentSettings.ignoredUsers.length;
+    const skippedByCap = toAdd.length - added;
+
+    setUi(next);
+    controls.bulkAddIgnoredInput.value = "";
+
+    const parts = [`Added ${added}`];
+    if (duplicate) parts.push(`${duplicate} already ignored`);
+    if (invalid) parts.push(`${invalid} invalid`);
+    if (skippedByCap) parts.push(`${skippedByCap} over the limit`);
+    saveSettings(next, parts.join(", "));
+  };
+
+  const addRenamedUser = (rawUsername, rawCustomName) => {
+    const name = normalizeIgnoredUsername(rawUsername);
+    if (!name) return;
+
+    if (!USERNAME_PATTERN.test(name)) {
+      flashStatus("Not a valid Twitch username");
+      return;
+    }
+
+    const customName = normalizeCustomName(rawCustomName);
+    if (!customName) {
+      flashStatus("Enter a custom name");
+      return;
+    }
+
+    const alreadyHadEntry = Object.prototype.hasOwnProperty.call(currentSettings.renamedUsers, name);
+    const next = normalizeSettings({
+      ...currentSettings,
+      renamedUsers: { ...currentSettings.renamedUsers, [name]: customName }
+    });
+
+    // normalizeSettings silently drops entries past MAX_RENAMED_USERS - if this
+    // is a brand new entry and the map didn't grow, that's what happened.
+    if (!alreadyHadEntry && Object.keys(next.renamedUsers).length === Object.keys(currentSettings.renamedUsers).length) {
+      flashStatus("Custom name list is full");
+      return;
+    }
+
+    setUi(next);
+    controls.renamedUserInput.value = "";
+    controls.renamedNameInput.value = "";
+    controls.renamedUserInput.focus();
+    saveSettings(next, `Renamed ${name}`);
+  };
+
+  // One username=customName (or username,customName) pair per line - unlike
+  // the ignore list's bulk parser, entries can't be comma-separated from each
+  // other on one line, since a custom name is itself free text that may
+  // contain a comma.
+  const parseBulkRenamedEntries = (raw) =>
+    (raw || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const match = line.match(/^(.*?)\s*[=,]\s*(.*)$/);
+        return match ? [normalizeIgnoredUsername(match[1]), match[2]] : null;
+      })
+      .filter(Boolean);
+
+  const addRenamedUsersBulk = (raw) => {
+    const entries = parseBulkRenamedEntries(raw);
+    if (!entries.length) {
+      flashStatus("Nothing to add - use username = custom name, one per line");
+      return;
+    }
+
+    const nextRenamedUsers = { ...currentSettings.renamedUsers };
+    const originalCount = Object.keys(currentSettings.renamedUsers).length;
+    let touched = 0;
+    let invalid = 0;
+    let emptyName = 0;
+
+    for (const [name, rawCustomName] of entries) {
+      if (!USERNAME_PATTERN.test(name)) {
+        invalid += 1;
+        continue;
+      }
+      const customName = normalizeCustomName(rawCustomName);
+      if (!customName) {
+        emptyName += 1;
+        continue;
+      }
+      nextRenamedUsers[name] = customName;
+      touched += 1;
+    }
+
+    if (!touched) {
+      flashStatus("No valid entries found");
+      return;
+    }
+
+    const next = normalizeSettings({ ...currentSettings, renamedUsers: nextRenamedUsers });
+    const actuallyAdded = Object.keys(next.renamedUsers).length - originalCount;
+    const skippedByCap = touched - actuallyAdded;
+
+    setUi(next);
+    controls.bulkAddRenamedInput.value = "";
+
+    const parts = [`Saved ${touched} custom name${touched === 1 ? "" : "s"}`];
+    if (invalid) parts.push(`${invalid} invalid username${invalid === 1 ? "" : "s"}`);
+    if (emptyName) parts.push(`${emptyName} missing a name`);
+    if (skippedByCap > 0) parts.push(`${skippedByCap} over the limit`);
+    saveSettings(next, parts.join(", "));
+  };
+
+  const removeRenamedUser = (name) => {
+    if (!Object.prototype.hasOwnProperty.call(currentSettings.renamedUsers, name)) return;
+
+    const nextRenamedUsers = { ...currentSettings.renamedUsers };
+    delete nextRenamedUsers[name];
+
+    const next = normalizeSettings({ ...currentSettings, renamedUsers: nextRenamedUsers });
+    setUi(next);
+    saveSettings(next, `Removed custom name for ${name}`);
+  };
+
+  const SETTINGS_EXPORT_FILENAME = "twitch-auto-claim-plus-settings.json";
+
+  const exportSettingsToFile = () => {
+    const payload = {
+      extension: "twitch-auto-claim-plus",
+      exportedAt: new Date().toISOString(),
+      settings: currentSettings
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = SETTINGS_EXPORT_FILENAME;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    // Revoke on a short delay rather than immediately after click() returns -
+    // click() only starts the download, it doesn't wait for it, so revoking
+    // synchronously risks the browser reading a already-dead blob URL.
+    window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+    flashStatus("Settings exported");
+  };
+
+  const importSettingsFromFile = async (file) => {
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      // Accept either this extension's own export wrapper ({ settings: {...} })
+      // or a bare settings object, so a hand-edited/hand-written file works too.
+      const isPlainObject = (value) =>
+        value !== null && typeof value === "object" && !Array.isArray(value);
+      const rawSettings = isPlainObject(parsed) && Object.prototype.hasOwnProperty.call(parsed, "settings")
+        ? parsed.settings
+        : parsed;
+
+      // JSON being syntactically valid is not enough: primitives, arrays,
+      // and unrelated objects used to normalize to DEFAULTS and were then
+      // reported as a successful import, effectively resetting everything.
+      if (!isPlainObject(rawSettings) || !SETTINGS_KEYS.some((key) => Object.prototype.hasOwnProperty.call(rawSettings, key))) {
+        throw new TypeError("Settings import does not contain recognized settings");
+      }
+
+      // normalizeSettings is the same defensive validation every other write
+      // path in this file already goes through - reused here rather than
+      // duplicated, since a file is arbitrary external input and needs exactly
+      // the same clamping/shape checks a hand-typed setting would.
+      const next = normalizeSettings(rawSettings);
+      setUi(next);
+      saveSettings(next, "Settings imported");
+    } catch (error) {
+      console.error("Twitch Auto Claim Plus: settings import failed", error);
+      flashStatus("Import failed - not a valid settings file");
+    }
+  };
+
   const syncFromStorageChanges = (changes, areaName) => {
     if (areaName === "local") {
       // Points total changed elsewhere - another Twitch tab claiming, a claim
@@ -573,7 +969,59 @@
     setUi(synced, { syncState: false });
   };
 
+  // The sidebar's five sections used to be two swapped full-height views
+  // (mainView/settingsView). They're now permanent tabs sharing one wide,
+  // short window - only the .panel matching the clicked .sidenav-item is
+  // shown, and the footer's action icons stay visible in every tab.
+  const TAB_IDS = ["status", "appearance", "declutter", "users", "backup"];
+
+  const setActiveTab = (tabId) => {
+    if (!TAB_IDS.includes(tabId)) return;
+
+    controls.panels.querySelectorAll(".panel").forEach((panel) => {
+      panel.hidden = panel.dataset.panel !== tabId;
+    });
+
+    controls.sidenav.querySelectorAll(".sidenav-item").forEach((item) => {
+      if (item.dataset.tab === tabId) {
+        item.setAttribute("aria-current", "page");
+      } else {
+        item.removeAttribute("aria-current");
+      }
+    });
+  };
+
   const bindEvents = () => {
+    buildDeclutterGrid();
+
+    controls.declutterOptions.addEventListener("change", (event) => {
+      const checkbox = event.target.closest('input[type="checkbox"]');
+      if (!checkbox) return;
+
+      const id = checkbox.dataset.id;
+      const isHidden = currentSettings.hiddenElements.includes(id);
+      const nextHiddenElements = checkbox.checked
+        ? (isHidden ? currentSettings.hiddenElements : [...currentSettings.hiddenElements, id])
+        : currentSettings.hiddenElements.filter((entry) => entry !== id);
+
+      const next = normalizeSettings({ ...currentSettings, hiddenElements: nextHiddenElements });
+      setUi(next);
+      saveSettings(next, checkbox.checked ? `Hiding ${DECLUTTER_OPTIONS[id]?.label || id}` : "Saved");
+    });
+
+    controls.declutterSelectAll.addEventListener("change", () => {
+      const hiddenElements = controls.declutterSelectAll.checked ? Object.keys(DECLUTTER_OPTIONS) : [];
+      const next = normalizeSettings({ ...currentSettings, hiddenElements });
+      setUi(next);
+      saveSettings(next, controls.declutterSelectAll.checked ? "All clutter hidden" : "All clutter restored");
+    });
+
+    controls.sidenav.addEventListener("click", (event) => {
+      const button = event.target.closest(".sidenav-item");
+      if (!button) return;
+      setActiveTab(button.dataset.tab);
+    });
+
     controls.theme.addEventListener("change", () => setThemePreset(controls.theme.value));
 
     controls.themeEnabled.addEventListener("change", () => {
@@ -615,6 +1063,59 @@
     controls.resetAll.addEventListener("click", resetAllSettings);
     controls.resetPoints.addEventListener("click", resetPointsTotal);
     controls.refreshStatus.addEventListener("click", fetchStatus);
+
+    controls.ignoredUserForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      addIgnoredUser(controls.ignoredUserInput.value);
+    });
+
+    controls.ignoredUsersList.addEventListener("click", (event) => {
+      const target = event.target.closest(".chip-remove");
+      if (!target) return;
+      removeIgnoredUser(target.dataset.username);
+    });
+
+    controls.bulkAddIgnoredToggle.addEventListener("click", () => {
+      const panel = controls.bulkAddIgnoredPanel;
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) controls.bulkAddIgnoredInput.focus();
+    });
+
+    controls.bulkAddIgnoredSubmit.addEventListener("click", () => {
+      addIgnoredUsersBulk(controls.bulkAddIgnoredInput.value);
+    });
+
+    controls.renamedUserForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      addRenamedUser(controls.renamedUserInput.value, controls.renamedNameInput.value);
+    });
+
+    controls.renamedUsersList.addEventListener("click", (event) => {
+      const target = event.target.closest(".chip-remove");
+      if (!target) return;
+      removeRenamedUser(target.dataset.username);
+    });
+
+    controls.bulkAddRenamedToggle.addEventListener("click", () => {
+      const panel = controls.bulkAddRenamedPanel;
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) controls.bulkAddRenamedInput.focus();
+    });
+
+    controls.bulkAddRenamedSubmit.addEventListener("click", () => {
+      addRenamedUsersBulk(controls.bulkAddRenamedInput.value);
+    });
+
+    controls.exportSettings.addEventListener("click", exportSettingsToFile);
+
+    controls.importSettingsButton.addEventListener("click", () => controls.importSettingsFile.click());
+
+    controls.importSettingsFile.addEventListener("change", async () => {
+      const file = controls.importSettingsFile.files?.[0];
+      controls.importSettingsFile.value = ""; // allow re-selecting the same file later
+      await importSettingsFromFile(file);
+    });
+
     chrome.storage.onChanged.addListener(syncFromStorageChanges);
   };
 
@@ -628,6 +1129,15 @@
       isHydrating = false;
       startRelativeTimeUpdates();
       await fetchStatus();
+
+      // Opened via the in-page nav panel's gear icon (background.js appends
+      // this query param to the window's URL) - jump straight to the
+      // declutter tab (the old settings view's first section) instead of
+      // landing on the status tab first.
+      if (new URLSearchParams(window.location.search).get("view") === "settings") {
+        setActiveTab("declutter");
+      }
+
       requestAnimationFrame(() => {
         fitFloatingWindowToContent();
         watchContentSizeForFloatingWindow();
